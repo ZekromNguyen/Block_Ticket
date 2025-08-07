@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:5000']
+    metrics_path: /metrics
+
+  - job_name: 'identity-service'
+    static_configs:
+      - targets: ['host.docker.internal:5001']
+    metrics_path: /metrics
+
+  - job_name: 'event-service'
+    static_configs:
+      - targets: ['host.docker.internal:5002']
+    metrics_path: /metrics
+
+  - job_name: 'ticketing-service'
+    static_configs:
+      - targets: ['host.docker.internal:5003']
+    metrics_path: /metrics
+
+  - job_name: 'resale-service'
+    static_configs:
+      - targets: ['host.docker.internal:5004']
+    metrics_path: /metrics
+
+  - job_name: 'verification-service'
+    static_configs:
+      - targets: ['host.docker.internal:5005']
+    metrics_path: /metrics

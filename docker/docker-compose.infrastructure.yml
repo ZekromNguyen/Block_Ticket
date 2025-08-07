@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Databases
+  postgres-identity:
+    image: postgres:15
+    container_name: postgres-identity
+    environment:
+      POSTGRES_DB: BlockTicket_Identity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_identity_data:/var/lib/postgresql/data
+    networks:
+      - blockticket-network
+
+  postgres-event:
+    image: postgres:15
+    container_name: postgres-event
+    environment:
+      POSTGRES_DB: BlockTicket_Event
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_event_data:/var/lib/postgresql/data
+    networks:
+      - blockticket-network
+
+  postgres-ticketing:
+    image: postgres:15
+    container_name: postgres-ticketing
+    environment:
+      POSTGRES_DB: BlockTicket_Ticketing
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_ticketing_data:/var/lib/postgresql/data
+    networks:
+      - blockticket-network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - blockticket-network
+
+  # RabbitMQ for message bus
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - blockticket-network
+
+  # Ganache for local blockchain development
+  ganache:
+    image: trufflesuite/ganache:latest
+    container_name: ganache
+    ports:
+      - "8545:8545"
+    command: >
+      --wallet.deterministic
+      --wallet.totalAccounts 10
+      --wallet.defaultBalance 1000
+      --chain.networkId 1337
+      --chain.chainId 1337
+      --server.host 0.0.0.0
+      --server.port 8545
+    networks:
+      - blockticket-network
+
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - blockticket-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - blockticket-network
+
+volumes:
+  postgres_identity_data:
+  postgres_event_data:
+  postgres_ticketing_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  blockticket-network:
+    driver: bridge
