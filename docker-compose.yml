@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: blockticket-postgres
+    environment:
+      POSTGRES_DB: blockticket_identity
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - blockticket-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: blockticket-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - blockticket-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --requirepass redis_password
+
+  # Identity Service
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Identity.API/Dockerfile
+    container_name: blockticket-identity-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=blockticket_identity;Username=postgres;Password=postgres;Port=5432;
+      - ConnectionStrings__Redis=redis:6379,password=redis_password
+      - Authentication__Authority=http://localhost:5001
+      - Authentication__Audience=blockticket-api
+      - Security__JwtSecretKey=your-super-secret-jwt-key-here-make-it-long-and-random-for-development
+      - Security__EncryptionKey=your-encryption-key-32-characters
+      - Security__RequireEmailConfirmation=false
+      - Security__RequirePhoneConfirmation=false
+      - Security__DefaultMfaEnabled=false
+      - Security__MaxLoginAttempts=10
+      - Security__LockoutDurationMinutes=5
+      - Security__MonitoringIntervalMinutes=5
+      - Security__DataRetentionDays=90
+      - Email__SmtpHost=mailhog
+      - Email__SmtpPort=1025
+      - Email__SmtpUsername=
+      - Email__SmtpPassword=
+      - Email__FromEmail=dev@blockticket.com
+      - Email__FromName=BlockTicket Dev
+      - OpenIddict__TokenLifetimes__AccessToken=60
+      - OpenIddict__TokenLifetimes__RefreshToken=43200
+      - OpenIddict__TokenLifetimes__IdentityToken=15
+    ports:
+      - "5001:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs:/app/logs
+
+  # MailHog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: blockticket-mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - blockticket-network
+
+  # Nginx API Gateway (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: blockticket-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - identity-api
+    networks:
+      - blockticket-network
+
+  # Prometheus for metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: blockticket-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - blockticket-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  # Grafana for monitoring dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: blockticket-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - blockticket-network
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  blockticket-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
