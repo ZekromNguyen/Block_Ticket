@@ -1,3 +1,4 @@
+using Identity.Application.Common.Configuration;
 using Identity.Application.Common.Interfaces;
 using Identity.Application.Common.Models;
 using Identity.Application.DTOs;
@@ -9,6 +10,7 @@ using Identity.Domain.Services;
 using Identity.Domain.ValueObjects;
 using MassTransit;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Shared.Contracts.Events;
 
 namespace Identity.Application.Features.Authentication.Commands;
@@ -28,21 +30,33 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
     private readonly IUserRepository _userRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly UserDomainService _userDomainService;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IEmailService _emailService;
+    private readonly ITokenService _tokenService;
     // private readonly IPublishEndpoint _publishEndpoint; // TODO: Re-enable after MassTransit setup
     private readonly ILogger<RegisterUserCommandHandler> _logger;
+    private readonly ApplicationSettings _applicationSettings;
 
     public RegisterUserCommandHandler(
         IUserRepository userRepository,
         IAuditLogRepository auditLogRepository,
         UserDomainService userDomainService,
+        IUnitOfWork unitOfWork,
+        IEmailService emailService,
+        ITokenService tokenService,
         // IPublishEndpoint publishEndpoint, // TODO: Re-enable after MassTransit setup
-        ILogger<RegisterUserCommandHandler> logger)
+        ILogger<RegisterUserCommandHandler> logger,
+        IOptions<ApplicationSettings> applicationSettings)
     {
         _userRepository = userRepository;
         _auditLogRepository = auditLogRepository;
         _userDomainService = userDomainService;
+        _unitOfWork = unitOfWork;
+        _emailService = emailService;
+        _tokenService = tokenService;
         // _publishEndpoint = publishEndpoint; // TODO: Re-enable after MassTransit setup
         _logger = logger;
+        _applicationSettings = applicationSettings.Value;
     }
 
     public async Task<Result<UserDto>> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
@@ -83,6 +97,27 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
                 request.UserAgent ?? "Unknown");
 
             await _auditLogRepository.AddAsync(auditLog, cancellationToken);
+
+            // Save all changes in a single transaction
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Send email confirmation
+            try
+            {
+                var confirmationToken = _tokenService.GenerateEmailConfirmationToken(user.Id);
+                var confirmationUrl = _applicationSettings.EmailConfirmationUrl;
+
+                _logger.LogInformation("🔗 Email confirmation URL: {ConfirmationUrl}?token={Token}",
+                    confirmationUrl, confirmationToken);
+
+                await _emailService.SendEmailConfirmationAsync(user.Email.Value, confirmationToken, confirmationUrl);
+                _logger.LogInformation("Email confirmation sent to {Email}", user.Email.Value);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send email confirmation to {Email}", user.Email.Value);
+                // Don't fail the registration if email sending fails
+            }
 
             // Publish domain events (temporarily disabled)
             // TODO: Re-enable after MassTransit setup

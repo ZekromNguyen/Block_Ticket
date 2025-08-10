@@ -2,6 +2,7 @@ using Identity.Application.Common.Models;
 using Identity.Application.DTOs;
 using Identity.Application.Features.OAuth.Commands;
 using Identity.Application.Features.OAuth.Queries;
+using Identity.Domain.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -11,11 +12,13 @@ public class OAuthService : IOAuthService
 {
     private readonly IMediator _mediator;
     private readonly ILogger<OAuthService> _logger;
+    private readonly ITokenService _tokenService;
 
-    public OAuthService(IMediator mediator, ILogger<OAuthService> logger)
+    public OAuthService(IMediator mediator, ILogger<OAuthService> logger, ITokenService tokenService)
     {
         _mediator = mediator;
         _logger = logger;
+        _tokenService = tokenService;
     }
 
     // Client Management
@@ -175,16 +178,75 @@ public class OAuthService : IOAuthService
 
     public async Task<Result<bool>> IntrospectTokenAsync(string token, string? clientId = null)
     {
-        // TODO: Implement token introspection
-        _logger.LogInformation("IntrospectTokenAsync called");
-        return Result<bool>.Failure("Token introspection not implemented yet");
+        try
+        {
+            _logger.LogInformation("IntrospectTokenAsync called");
+
+            // Check if it's a reference token
+            var referenceToken = await _tokenService.ValidateReferenceTokenAsync(token);
+            if (referenceToken != null)
+            {
+                _logger.LogDebug("Reference token {TokenId} is valid", token);
+                return Result<bool>.Success(true);
+            }
+
+            _logger.LogDebug("Token {Token} is invalid or expired", token);
+            return Result<bool>.Success(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error introspecting token {Token}", token);
+            return Result<bool>.Failure("Error validating token");
+        }
     }
 
     public async Task<Result<UserInfoDto>> GetUserInfoAsync(string accessToken)
     {
-        // TODO: Implement userinfo endpoint
-        _logger.LogInformation("GetUserInfoAsync called");
-        return Result<UserInfoDto>.Failure("UserInfo endpoint not implemented yet");
+        try
+        {
+            _logger.LogInformation("GetUserInfoAsync called");
+
+            // Validate the reference token and get token info
+            var referenceToken = await _tokenService.ValidateReferenceTokenAsync(accessToken);
+            if (referenceToken == null)
+            {
+                _logger.LogDebug("Invalid or expired access token {Token}", accessToken);
+                return Result<UserInfoDto>.Failure("Invalid or expired access token");
+            }
+
+            // Get token info which includes user claims
+            var tokenInfo = await _tokenService.GetTokenInfoAsync(accessToken);
+            if (tokenInfo == null)
+            {
+                _logger.LogDebug("Token info not found for token {Token}", accessToken);
+                return Result<UserInfoDto>.Failure("Token info not found");
+            }
+
+            // Extract user information from claims
+            var userInfo = new UserInfoDto
+            {
+                Id = tokenInfo.UserId,
+                Email = tokenInfo.Email,
+                Name = $"{tokenInfo.FirstName} {tokenInfo.LastName}".Trim(),
+                GivenName = tokenInfo.FirstName,
+                FamilyName = tokenInfo.LastName,
+                EmailVerified = tokenInfo.EmailConfirmed,
+                UserType = tokenInfo.UserType,
+                WalletAddress = tokenInfo.WalletAddress,
+                MfaEnabled = tokenInfo.MfaEnabled,
+                Scopes = tokenInfo.Scopes.ToArray(),
+                ExpiresAt = tokenInfo.ExpiresAt,
+                Roles = Array.Empty<string>() // TODO: Extract roles from claims if needed
+            };
+
+            _logger.LogDebug("User info retrieved for token {Token}", accessToken);
+            return Result<UserInfoDto>.Success(userInfo);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user info for token {Token}", accessToken);
+            return Result<UserInfoDto>.Failure("Error retrieving user information");
+        }
     }
 
     // Discovery

@@ -158,6 +158,10 @@ builder.Services.AddHealthChecks()
     .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")!)
     .AddRedis(builder.Configuration.GetConnectionString("Redis")!);
 
+// Add configuration options
+builder.Services.Configure<Identity.Application.Common.Configuration.ApplicationSettings>(
+    builder.Configuration.GetSection(Identity.Application.Common.Configuration.ApplicationSettings.SectionName));
+
 // Add application layers
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
@@ -166,27 +170,10 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 builder.Services.AddScoped<Identity.API.Middleware.IPerformanceMetricsService, Identity.API.Middleware.PerformanceMetricsService>();
 
 // Add authentication and authorization
-builder.Services.AddAuthentication()
-    .AddJwtBearer("Bearer", options =>
-    {
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        
-        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
-        {
-            OnAuthenticationFailed = context =>
-            {
-                Log.Warning("JWT authentication failed: {Error}", context.Exception.Message);
-                return Task.CompletedTask;
-            },
-            OnTokenValidated = context =>
-            {
-                Log.Debug("JWT token validated for user: {User}", context.Principal?.Identity?.Name);
-                return Task.CompletedTask;
-            }
-        };
-    });
+builder.Services.AddAuthentication(Identity.API.Authentication.ReferenceTokenAuthenticationSchemeOptions.DefaultScheme)
+    .AddScheme<Identity.API.Authentication.ReferenceTokenAuthenticationSchemeOptions, Identity.API.Authentication.ReferenceTokenAuthenticationHandler>(
+        Identity.API.Authentication.ReferenceTokenAuthenticationSchemeOptions.DefaultScheme,
+        options => { });
 
 builder.Services.AddAuthorization(options =>
 {

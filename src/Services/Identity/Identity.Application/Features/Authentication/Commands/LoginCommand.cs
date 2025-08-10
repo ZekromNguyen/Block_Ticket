@@ -111,18 +111,20 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
                 request.IpAddress ?? "Unknown");
 
             var sessionDuration = request.RememberMe ? TimeSpan.FromDays(30) : TimeSpan.FromHours(24);
-            
-            // Generate tokens
-            var accessToken = _tokenService.GenerateAccessToken(user, new[] { "openid", "profile", "email" });
-            var refreshToken = _tokenService.GenerateRefreshToken();
-            
-            session.SetRefreshToken(refreshToken, DateTime.UtcNow.Add(sessionDuration));
 
-            // Save session
+            // Save session first
             await _sessionRepository.AddAsync(session, cancellationToken);
 
             // Update user
             await _userRepository.UpdateAsync(user, cancellationToken);
+
+            // Generate reference tokens after session is saved
+            var accessToken = await _tokenService.GenerateReferenceAccessTokenAsync(user, new[] { "openid", "profile", "email" });
+            var refreshToken = await _tokenService.GenerateReferenceRefreshTokenAsync(user.Id, session.Id.ToString());
+
+            // Update session with refresh token
+            session.SetRefreshToken(refreshToken, DateTime.UtcNow.Add(sessionDuration));
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
 
             // Create successful login audit log
             var successAuditLog = AuditLog.CreateLoginAttempt(

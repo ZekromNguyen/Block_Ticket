@@ -1,10 +1,12 @@
+using Identity.Application.Common.Configuration;
 using Identity.Application.Common.Interfaces;
 using Identity.Application.Common.Models;
+using Identity.Domain.Entities;
 using Identity.Domain.Repositories;
 using Identity.Domain.Services;
 using Identity.Domain.ValueObjects;
-
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Identity.Application.Features.Authentication.Commands;
 
@@ -20,19 +22,22 @@ public class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswordComman
     private readonly ITokenService _tokenService;
     private readonly IEmailService _emailService;
     private readonly ILogger<ForgotPasswordCommandHandler> _logger;
+    private readonly ApplicationSettings _applicationSettings;
 
     public ForgotPasswordCommandHandler(
         IUserRepository userRepository,
         IAuditLogRepository auditLogRepository,
         ITokenService tokenService,
         IEmailService emailService,
-        ILogger<ForgotPasswordCommandHandler> logger)
+        ILogger<ForgotPasswordCommandHandler> logger,
+        IOptions<ApplicationSettings> applicationSettings)
     {
         _userRepository = userRepository;
         _auditLogRepository = auditLogRepository;
         _tokenService = tokenService;
         _emailService = emailService;
         _logger = logger;
+        _applicationSettings = applicationSettings.Value;
     }
 
     public async Task<Result> Handle(ForgotPasswordCommand request, CancellationToken cancellationToken)
@@ -53,7 +58,10 @@ public class ForgotPasswordCommandHandler : ICommandHandler<ForgotPasswordComman
             var resetToken = _tokenService.GeneratePasswordResetToken(user.Id);
 
             // Send password reset email
-            var resetLink = $"https://blockticket.com/reset-password?token={resetToken}&email={email.Value}";
+            var resetLink = $"{_applicationSettings.PasswordResetUrl}?token={resetToken}&email={email.Value}";
+
+            _logger.LogInformation("🔗 Password reset URL: {ResetLink}", resetLink);
+
             await _emailService.SendPasswordResetAsync(email.Value, resetToken, resetLink);
 
             // Create audit log

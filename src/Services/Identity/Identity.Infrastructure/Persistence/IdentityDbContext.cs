@@ -23,6 +23,7 @@ public class IdentityDbContext : DbContext
     public DbSet<AccountLockout> AccountLockouts { get; set; } = null!;
     public DbSet<SuspiciousActivity> SuspiciousActivities { get; set; } = null!;
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+    public DbSet<ReferenceToken> ReferenceTokens { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,6 +42,7 @@ public class IdentityDbContext : DbContext
         modelBuilder.ApplyConfiguration(new AccountLockoutConfiguration());
         modelBuilder.ApplyConfiguration(new SuspiciousActivityConfiguration());
         modelBuilder.ApplyConfiguration(new AuditLogConfiguration());
+        modelBuilder.ApplyConfiguration(new ReferenceTokenConfiguration());
 
         // Configure OpenIddict entities
         modelBuilder.UseOpenIddict();

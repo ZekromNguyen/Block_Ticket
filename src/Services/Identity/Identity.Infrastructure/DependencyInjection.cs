@@ -1,3 +1,4 @@
+using Identity.Application.Common.Interfaces;
 using Identity.Domain.Repositories;
 using Identity.Domain.Services;
 using Identity.Infrastructure.Configuration;
@@ -11,7 +12,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Identity.Domain.Services;
 
 namespace Identity.Infrastructure;
 
@@ -41,6 +41,9 @@ public static class DependencyInjection
             }
         });
 
+        // Add Unit of Work
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+
         // Add Repositories
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserSessionRepository, UserSessionRepository>();
@@ -52,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
         services.AddScoped<IAccountLockoutRepository, AccountLockoutRepository>();
         services.AddScoped<ISuspiciousActivityRepository, SuspiciousActivityRepository>();
+        services.AddScoped<IReferenceTokenRepository, ReferenceTokenRepository>();
 
         // Add Domain Services
         services.AddScoped<IPasswordService, PasswordService>();
@@ -92,55 +96,170 @@ public static class DependencyInjection
     }
 }
 
-// Placeholder services that would be implemented based on requirements
+// Email service implementation using SMTP
 public class EmailService : Identity.Domain.Services.IEmailService
 {
     private readonly ILogger<EmailService> _logger;
+    private readonly IConfiguration _configuration;
 
-    public EmailService(ILogger<EmailService> logger)
+    public EmailService(ILogger<EmailService> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
     }
 
     public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true)
     {
-        // TODO: Implement email sending (SendGrid, SMTP, etc.)
-        _logger.LogInformation("Sending email to {To} with subject {Subject}", to, subject);
-        await Task.Delay(100); // Simulate async operation
+        try
+        {
+            var smtpHost = _configuration["Email:SmtpHost"];
+            var smtpPort = int.Parse(_configuration["Email:SmtpPort"] ?? "587");
+            var smtpUsername = _configuration["Email:SmtpUsername"];
+            var smtpPassword = _configuration["Email:SmtpPassword"];
+            var fromEmail = _configuration["Email:FromEmail"];
+            var fromName = _configuration["Email:FromName"];
+
+            _logger.LogInformation("Starting email send process to {To} with subject {Subject}", to, subject);
+            _logger.LogDebug("SMTP Configuration - Host: {Host}, Port: {Port}, Username: {Username}, FromEmail: {FromEmail}",
+                smtpHost, smtpPort, smtpUsername, fromEmail);
+
+            if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword))
+            {
+                _logger.LogWarning("SMTP configuration is incomplete. Host: {Host}, Username: {Username}, Password: {HasPassword}",
+                    smtpHost, smtpUsername, !string.IsNullOrEmpty(smtpPassword));
+                return;
+            }
+
+            using var client = new System.Net.Mail.SmtpClient(smtpHost, smtpPort);
+            client.EnableSsl = true;
+            client.UseDefaultCredentials = false;
+            client.Credentials = new System.Net.NetworkCredential(smtpUsername, smtpPassword);
+            client.Timeout = 30000; // 30 seconds timeout
+            client.DeliveryMethod = System.Net.Mail.SmtpDeliveryMethod.Network;
+
+            _logger.LogDebug("SMTP client configured - SSL: {EnableSsl}, Timeout: {Timeout}ms", client.EnableSsl, client.Timeout);
+
+            using var message = new System.Net.Mail.MailMessage();
+            message.From = new System.Net.Mail.MailAddress(fromEmail ?? smtpUsername, fromName ?? "BlockTicket");
+            message.To.Add(to);
+            message.Subject = subject;
+            message.Body = body;
+            message.IsBodyHtml = isHtml;
+
+            _logger.LogDebug("Email message created - From: {From}, To: {To}, IsHtml: {IsHtml}",
+                message.From.Address, to, isHtml);
+
+            _logger.LogInformation("Attempting to send email via SMTP...");
+            await client.SendMailAsync(message);
+            _logger.LogInformation("✅ Email sent successfully to {To} with subject {Subject}", to, subject);
+        }
+        catch (System.Net.Mail.SmtpException smtpEx)
+        {
+            _logger.LogError(smtpEx, "❌ SMTP Error sending email to {To}. StatusCode: {StatusCode}, Message: {Message}",
+                to, smtpEx.StatusCode, smtpEx.Message);
+            throw;
+        }
+        catch (System.Net.Sockets.SocketException socketEx)
+        {
+            _logger.LogError(socketEx, "❌ Network/Socket Error sending email to {To}. ErrorCode: {ErrorCode}",
+                to, socketEx.ErrorCode);
+            throw;
+        }
+        catch (System.Security.Authentication.AuthenticationException authEx)
+        {
+            _logger.LogError(authEx, "❌ Authentication Error sending email to {To}. Check Gmail App Password and 2FA settings", to);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Unexpected error sending email to {To} with subject {Subject}", to, subject);
+            throw;
+        }
     }
 
     public async Task SendEmailConfirmationAsync(string email, string confirmationToken, string callbackUrl)
     {
-        var subject = "Confirm your email address";
-        var body = $"Please confirm your email address by clicking this link: {callbackUrl}?token={confirmationToken}";
+        var subject = "Confirm your email address - BlockTicket";
+        var body = $@"
+            <html>
+            <body>
+                <h2>Welcome to BlockTicket!</h2>
+                <p>Please confirm your email address by clicking the link below:</p>
+                <p><a href='{callbackUrl}?token={confirmationToken}' style='background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Confirm Email</a></p>
+                <p>If you didn't create this account, please ignore this email.</p>
+                <p>Best regards,<br>BlockTicket Team</p>
+            </body>
+            </html>";
         await SendEmailAsync(email, subject, body);
     }
 
     public async Task SendPasswordResetAsync(string email, string resetToken, string callbackUrl)
     {
-        var subject = "Reset your password";
-        var body = $"Reset your password by clicking this link: {callbackUrl}?token={resetToken}";
+        var subject = "Reset your password - BlockTicket";
+        var body = $@"
+            <html>
+            <body>
+                <h2>Password Reset Request</h2>
+                <p>You requested to reset your password. Click the link below to reset it:</p>
+                <p><a href='{callbackUrl}?token={resetToken}' style='background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
+                <p>This link will expire in 1 hour.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <p>Best regards,<br>BlockTicket Team</p>
+            </body>
+            </html>";
         await SendEmailAsync(email, subject, body);
     }
 
     public async Task SendMfaCodeAsync(string email, string code)
     {
-        var subject = "Your verification code";
-        var body = $"Your verification code is: {code}";
+        var subject = "Your BlockTicket verification code";
+        var body = $@"
+            <html>
+            <body>
+                <h2>Your Verification Code</h2>
+                <p>Your BlockTicket verification code is:</p>
+                <h1 style='color: #007bff; font-size: 32px; letter-spacing: 5px; text-align: center; margin: 20px 0;'>{code}</h1>
+                <p>This code will expire in 5 minutes.</p>
+                <p>If you didn't request this code, please ignore this email.</p>
+                <p>Best regards,<br>BlockTicket Team</p>
+            </body>
+            </html>";
         await SendEmailAsync(email, subject, body);
     }
 
     public async Task SendSecurityAlertAsync(string email, string alertMessage)
     {
         var subject = "Security Alert - BlockTicket";
-        var body = $"Security Alert: {alertMessage}";
+        var body = $@"
+            <html>
+            <body>
+                <h2>Security Alert</h2>
+                <p><strong>Alert:</strong> {alertMessage}</p>
+                <p>If this was you, no action is needed. If not, please secure your account immediately.</p>
+                <p>Best regards,<br>BlockTicket Security Team</p>
+            </body>
+            </html>";
         await SendEmailAsync(email, subject, body);
     }
 
     public async Task SendWelcomeEmailAsync(string email, string name)
     {
         var subject = "Welcome to BlockTicket!";
-        var body = $"Welcome {name}! Thank you for joining BlockTicket.";
+        var body = $@"
+            <html>
+            <body>
+                <h2>Welcome to BlockTicket, {name}!</h2>
+                <p>Thank you for joining BlockTicket, the future of event ticketing on the blockchain.</p>
+                <p>You can now:</p>
+                <ul>
+                    <li>Browse and purchase event tickets</li>
+                    <li>Manage your digital wallet</li>
+                    <li>Trade tickets securely</li>
+                </ul>
+                <p>Get started by exploring our platform!</p>
+                <p>Best regards,<br>BlockTicket Team</p>
+            </body>
+            </html>";
         await SendEmailAsync(email, subject, body);
     }
 }

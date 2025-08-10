@@ -67,8 +67,7 @@ public class UserRepository : IUserRepository
         try
         {
             await _context.Users.AddAsync(user, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogDebug("User {UserId} added successfully", user.Id);
+            _logger.LogDebug("User {UserId} added to context", user.Id);
         }
         catch (Exception ex)
         {

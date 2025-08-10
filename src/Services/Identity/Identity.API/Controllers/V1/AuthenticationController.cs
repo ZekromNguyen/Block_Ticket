@@ -216,6 +216,34 @@ public class AuthenticationController : ControllerBase
     }
 
     /// <summary>
+    /// Resend email confirmation
+    /// </summary>
+    /// <param name="email">Email address to resend confirmation to</param>
+    /// <returns>Success confirmation</returns>
+    [HttpPost("resend-email-confirmation")]
+    [EnableRateLimiting("AuthPolicy")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResendEmailConfirmation([FromBody] ResendEmailConfirmationDto resendEmailDto)
+    {
+        var result = await _authenticationService.ResendEmailConfirmationAsync(resendEmailDto.Email);
+
+        if (result.IsSuccess)
+        {
+            _logger.LogInformation("Email confirmation resent successfully: {Email}", resendEmailDto.Email);
+            return Ok(new { message = "Email confirmation sent successfully" });
+        }
+
+        _logger.LogWarning("Resend email confirmation failed: {Email}, Error: {Error}", resendEmailDto.Email, result.Error);
+        return BadRequest(new ProblemDetails
+        {
+            Title = "Resend Email Confirmation Failed",
+            Detail = result.Error,
+            Status = StatusCodes.Status400BadRequest
+        });
+    }
+
+    /// <summary>
     /// Request password reset
     /// </summary>
     /// <param name="forgotPasswordDto">Email address for password reset</param>

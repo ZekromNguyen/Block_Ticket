@@ -73,6 +73,12 @@ public class AuthenticationService : IAuthenticationService
         return await _mediator.Send(command);
     }
 
+    public async Task<Result> ResendEmailConfirmationAsync(string email)
+    {
+        var command = new ResendEmailConfirmationCommand(email);
+        return await _mediator.Send(command);
+    }
+
     public async Task<Result> ForgotPasswordAsync(ForgotPasswordDto forgotPasswordDto, string? ipAddress = null, string? userAgent = null)
     {
         var command = new ForgotPasswordCommand(forgotPasswordDto.Email, ipAddress, userAgent);

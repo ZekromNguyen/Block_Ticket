@@ -89,8 +89,7 @@ public class AuditLogRepository : IAuditLogRepository
         try
         {
             await _context.AuditLogs.AddAsync(auditLog, cancellationToken);
-            await _context.SaveChangesAsync(cancellationToken);
-            _logger.LogDebug("Audit log {AuditLogId} added successfully", auditLog.Id);
+            _logger.LogDebug("Audit log {AuditLogId} added to context", auditLog.Id);
         }
         catch (Exception ex)
         {
