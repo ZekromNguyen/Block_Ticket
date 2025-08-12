@@ -1,5 +1,7 @@
 using Identity.Application.DTOs;
+using Identity.Application.Features.Users.Queries;
 using Identity.Application.Services;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -17,13 +19,16 @@ namespace Identity.API.Controllers.V1;
 public class AuthenticationController : ControllerBase
 {
     private readonly IAuthenticationService _authenticationService;
+    private readonly IMediator _mediator;
     private readonly ILogger<AuthenticationController> _logger;
 
     public AuthenticationController(
         IAuthenticationService authenticationService,
+        IMediator mediator,
         ILogger<AuthenticationController> logger)
     {
         _authenticationService = authenticationService;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -63,7 +68,7 @@ public class AuthenticationController : ControllerBase
     /// Authenticate user and obtain access tokens
     /// </summary>
     /// <param name="loginDto">Login credentials</param>
-    /// <returns>Authentication tokens and user information</returns>
+    /// <returns>Authentication tokens (access_token, refresh_token, expires_at)</returns>
     [HttpPost("login")]
     [EnableRateLimiting("AuthPolicy")]
     [ProducesResponseType(typeof(LoginResultDto), StatusCodes.Status200OK)]
@@ -181,9 +186,23 @@ public class AuthenticationController : ControllerBase
             return Unauthorized();
         }
 
-        // TODO: Implement GetUserByIdQuery through a user service
         _logger.LogInformation("Profile requested for user: {UserId}", userId);
-        return Ok(new { message = "Profile endpoint not fully implemented yet" });
+
+        var query = new GetUserByIdQuery(userId.Value);
+        var result = await _mediator.Send(query);
+
+        if (result.IsSuccess)
+        {
+            return Ok(result.Value);
+        }
+
+        _logger.LogWarning("Failed to get profile for user {UserId}: {Error}", userId, result.Error);
+        return NotFound(new ProblemDetails
+        {
+            Title = "User Not Found",
+            Detail = result.Error,
+            Status = StatusCodes.Status404NotFound
+        });
     }
 
     /// <summary>

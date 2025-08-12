@@ -37,13 +37,23 @@ public class ReferenceTokenAuthenticationHandler : AuthenticationHandler<Referen
             }
 
             var authHeader = Request.Headers["Authorization"].ToString();
-            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
+            if (string.IsNullOrEmpty(authHeader))
             {
                 return AuthenticateResult.NoResult();
             }
 
-            // Extract the token
-            var token = authHeader.Substring("Bearer ".Length).Trim();
+            // Extract the token - support both "Bearer token" and just "token" formats
+            string token;
+            if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                token = authHeader.Substring("Bearer ".Length).Trim();
+            }
+            else
+            {
+                // Direct token without Bearer prefix
+                token = authHeader.Trim();
+            }
+
             if (string.IsNullOrEmpty(token))
             {
                 return AuthenticateResult.Fail("Invalid token format");

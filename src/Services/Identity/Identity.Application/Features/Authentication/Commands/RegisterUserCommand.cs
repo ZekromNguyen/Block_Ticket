@@ -28,6 +28,7 @@ public record RegisterUserCommand(
 public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, Result<UserDto>>
 {
     private readonly IUserRepository _userRepository;
+    private readonly IRoleRepository _roleRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly UserDomainService _userDomainService;
     private readonly IUnitOfWork _unitOfWork;
@@ -39,6 +40,7 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
 
     public RegisterUserCommandHandler(
         IUserRepository userRepository,
+        IRoleRepository roleRepository,
         IAuditLogRepository auditLogRepository,
         UserDomainService userDomainService,
         IUnitOfWork unitOfWork,
@@ -49,6 +51,7 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
         IOptions<ApplicationSettings> applicationSettings)
     {
         _userRepository = userRepository;
+        _roleRepository = roleRepository;
         _auditLogRepository = auditLogRepository;
         _userDomainService = userDomainService;
         _unitOfWork = unitOfWork;
@@ -85,7 +88,13 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
                 walletAddress, 
                 cancellationToken);
 
-            // Save user
+            // Assign default role based on user type BEFORE adding to repository
+            await AssignDefaultRoleAsync(user, userType, cancellationToken);
+
+            // Set the final UpdatedAt timestamp after all modifications
+            user.UpdatedAt = DateTime.UtcNow;
+
+            // Save user (after all modifications are complete)
             await _userRepository.AddAsync(user, cancellationToken);
 
             // Create audit log
@@ -176,6 +185,43 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
         {
             _logger.LogError(ex, "Unexpected error during user registration");
             return Result<UserDto>.Failure("An unexpected error occurred during registration");
+        }
+    }
+
+    private async Task AssignDefaultRoleAsync(User user, UserType userType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Map UserType to role name
+            string roleName = userType switch
+            {
+                UserType.Fan => "fan",
+                UserType.Promoter => "promoter",
+                UserType.Admin => "admin",
+                _ => "fan" // Default to fan role
+            };
+
+            // Find the role by name
+            var role = await _roleRepository.GetByNameAsync(roleName, cancellationToken);
+            if (role != null)
+            {
+                // Assign the role to the user without updating timestamp to avoid concurrency issues
+                user.AssignRole(role.Id, "system", null, updateTimestamp: false);
+                // Note: No need to call UpdateAsync here - the UnitOfWork will handle all changes
+
+                _logger.LogInformation("Assigned role '{RoleName}' to user {UserId} during registration",
+                    roleName, user.Id);
+            }
+            else
+            {
+                _logger.LogWarning("Default role '{RoleName}' not found for user type {UserType}. User {UserId} registered without role.",
+                    roleName, userType, user.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to assign default role to user {UserId} during registration", user.Id);
+            // Don't throw - registration should still succeed even if role assignment fails
         }
     }
 }

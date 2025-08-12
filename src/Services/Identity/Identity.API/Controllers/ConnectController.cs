@@ -1,4 +1,5 @@
 using Identity.Application.Services;
+using Identity.Application.Features.Users.Queries;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,7 @@ using System.Collections.Immutable;
 using System.Security.Claims;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using AuthenticationService = Identity.Application.Services.IAuthenticationService;
+using MediatR;
 
 namespace Identity.API.Controllers;
 
@@ -22,15 +24,18 @@ public class ConnectController : ControllerBase
 {
     private readonly AuthenticationService _authenticationService;
     private readonly IOpenIddictApplicationManager _applicationManager;
+    private readonly IMediator _mediator;
     private readonly ILogger<ConnectController> _logger;
 
     public ConnectController(
         AuthenticationService authenticationService,
         IOpenIddictApplicationManager applicationManager,
+        IMediator mediator,
         ILogger<ConnectController> logger)
     {
         _authenticationService = authenticationService;
         _applicationManager = applicationManager;
+        _mediator = mediator;
         _logger = logger;
     }
 
@@ -192,7 +197,22 @@ public class ConnectController : ControllerBase
             return Forbid(properties, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        var user = loginResult.User;
+        // Get user information for claims
+        var userQuery = new GetUserByEmailQuery(request.Username!);
+        var userResult = await _mediator.Send(userQuery);
+
+        if (!userResult.IsSuccess || userResult.Value == null)
+        {
+            var properties = new AuthenticationProperties(new Dictionary<string, string?>
+            {
+                [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
+                [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "User not found"
+            });
+
+            return Forbid(properties, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
+        var user = userResult.Value;
         var claims = new List<Claim>
         {
             new(Claims.Subject, user.Id.ToString()),

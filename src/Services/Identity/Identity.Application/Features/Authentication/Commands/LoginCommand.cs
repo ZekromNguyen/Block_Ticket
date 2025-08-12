@@ -79,8 +79,7 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
                 return Result<LoginResultDto>.Success(new LoginResultDto
                 {
                     RequiresMfa = true,
-                    AvailableMfaMethods = availableMethods,
-                    User = MapToUserDto(user)
+                    AvailableMfaMethods = availableMethods
                 });
             }
 
@@ -143,7 +142,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
                 AccessToken = accessToken,
                 RefreshToken = refreshToken,
                 ExpiresAt = session.ExpiresAt,
-                User = MapToUserDto(user),
                 RequiresMfa = false
             });
         }
@@ -196,22 +194,5 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
         return false;
     }
 
-    private static UserDto MapToUserDto(User user)
-    {
-        return new UserDto
-        {
-            Id = user.Id,
-            Email = user.Email.Value,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            WalletAddress = user.WalletAddress?.Value,
-            UserType = user.UserType.ToString(),
-            Status = user.Status.ToString(),
-            EmailConfirmed = user.EmailConfirmed,
-            MfaEnabled = user.MfaEnabled,
-            LastLoginAt = user.LastLoginAt,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt
-        };
-    }
+
 }

@@ -98,8 +98,20 @@ public class AuthenticationService : IAuthenticationService
 
     public async Task<Result> ChangePasswordAsync(Guid userId, ChangePasswordDto changePasswordDto, string? ipAddress = null, string? userAgent = null)
     {
-        // TODO: Implement ChangePasswordCommand
-        _logger.LogInformation("ChangePasswordAsync called for user {UserId}", userId);
-        return Result.Failure("Not implemented yet");
+        // Validate that new password and confirm password match
+        if (changePasswordDto.NewPassword != changePasswordDto.ConfirmPassword)
+        {
+            _logger.LogWarning("Password change failed: Password confirmation mismatch for user {UserId}", userId);
+            return Result.Failure("New password and confirmation password do not match");
+        }
+
+        var command = new ChangePasswordCommand(
+            userId,
+            changePasswordDto.CurrentPassword,
+            changePasswordDto.NewPassword,
+            ipAddress,
+            userAgent);
+
+        return await _mediator.Send(command);
     }
 }

@@ -199,14 +199,19 @@ public class User : BaseAuditableEntity
         AddDomainEvent(new UserAllSessionsEndedDomainEvent(Id));
     }
 
-    public void AssignRole(Guid roleId, string? assignedBy = null, DateTime? expiresAt = null)
+    public void AssignRole(Guid roleId, string? assignedBy = null, DateTime? expiresAt = null, bool updateTimestamp = true)
     {
         if (_userRoles.Any(ur => ur.RoleId == roleId && ur.IsValid()))
             return; // Role already assigned and active
 
         var userRole = new UserRole(Id, roleId, assignedBy, expiresAt);
         _userRoles.Add(userRole);
-        UpdatedAt = DateTime.UtcNow;
+
+        // Only update timestamp if explicitly requested (avoid concurrency issues during registration)
+        if (updateTimestamp)
+        {
+            UpdatedAt = DateTime.UtcNow;
+        }
 
         AddDomainEvent(new UserRoleAssignedDomainEvent(Id, roleId));
     }

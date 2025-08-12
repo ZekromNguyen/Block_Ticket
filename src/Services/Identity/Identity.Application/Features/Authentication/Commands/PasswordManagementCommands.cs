@@ -270,3 +270,115 @@ public class ConfirmEmailCommandHandler : ICommandHandler<ConfirmEmailCommand, R
         }
     }
 }
+
+public record ChangePasswordCommand(
+    Guid UserId,
+    string CurrentPassword,
+    string NewPassword,
+    string? IpAddress = null,
+    string? UserAgent = null) : ICommand<Result>;
+
+public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordCommand, Result>
+{
+    private readonly IUserRepository _userRepository;
+    private readonly IAuditLogRepository _auditLogRepository;
+    private readonly IUserSessionRepository _sessionRepository;
+    private readonly IPasswordService _passwordService;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<ChangePasswordCommandHandler> _logger;
+
+    public ChangePasswordCommandHandler(
+        IUserRepository userRepository,
+        IAuditLogRepository auditLogRepository,
+        IUserSessionRepository sessionRepository,
+        IPasswordService passwordService,
+        IUnitOfWork unitOfWork,
+        ILogger<ChangePasswordCommandHandler> logger)
+    {
+        _userRepository = userRepository;
+        _auditLogRepository = auditLogRepository;
+        _sessionRepository = sessionRepository;
+        _passwordService = passwordService;
+        _unitOfWork = unitOfWork;
+        _logger = logger;
+    }
+
+    public async Task<Result> Handle(ChangePasswordCommand request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var user = await _userRepository.GetByIdAsync(request.UserId, cancellationToken);
+            if (user == null)
+            {
+                _logger.LogWarning("Password change attempted for non-existent user {UserId}", request.UserId);
+                return Result.Failure("User not found");
+            }
+
+            // Verify current password
+            if (!_passwordService.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Password change failed: Invalid current password for user {UserId}", request.UserId);
+
+                // Create failed audit log
+                var failedAuditLog = Domain.Entities.AuditLog.CreateAdminAction(
+                    user.Id,
+                    "PASSWORD_CHANGE_FAILED",
+                    "USER_SECURITY",
+                    request.IpAddress ?? "Unknown",
+                    request.UserAgent ?? "Unknown",
+                    errorMessage: "Invalid current password");
+
+                await _auditLogRepository.AddAsync(failedAuditLog, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                return Result.Failure("Current password is incorrect");
+            }
+
+            // Validate new password strength
+            if (!_passwordService.IsPasswordStrong(request.NewPassword))
+            {
+                _logger.LogWarning("Password change failed: Weak password for user {UserId}", request.UserId);
+                return Result.Failure("Password must contain at least 8 characters, including uppercase, lowercase, digit, and special character");
+            }
+
+            // Check if new password is different from current password
+            if (_passwordService.VerifyPassword(request.NewPassword, user.PasswordHash))
+            {
+                _logger.LogWarning("Password change failed: New password same as current for user {UserId}", request.UserId);
+                return Result.Failure("New password must be different from current password");
+            }
+
+            // Hash new password
+            var newPasswordHash = _passwordService.HashPassword(request.NewPassword);
+
+            // Change password
+            user.ChangePassword(newPasswordHash);
+
+            // End all other sessions for security (except current session)
+            await _sessionRepository.EndAllUserSessionsAsync(user.Id, cancellationToken);
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+
+            // Create success audit log
+            var successAuditLog = Domain.Entities.AuditLog.CreateAdminAction(
+                user.Id,
+                "PASSWORD_CHANGED",
+                "USER_SECURITY",
+                request.IpAddress ?? "Unknown",
+                request.UserAgent ?? "Unknown");
+
+            await _auditLogRepository.AddAsync(successAuditLog, cancellationToken);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Password changed successfully for user {UserId}", request.UserId);
+
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error changing password for user {UserId}", request.UserId);
+            return Result.Failure("An error occurred while changing your password");
+        }
+    }
+}

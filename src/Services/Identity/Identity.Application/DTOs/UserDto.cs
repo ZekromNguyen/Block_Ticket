@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Identity.Application.DTOs;
 
 public record UserDto
@@ -35,7 +37,15 @@ public record UpdateUserDto
 
 public record ChangePasswordDto
 {
+    [Required(ErrorMessage = "Current password is required")]
+    [MinLength(1, ErrorMessage = "Current password cannot be empty")]
     public string CurrentPassword { get; init; } = string.Empty;
+
+    [Required(ErrorMessage = "New password is required")]
+    [MinLength(8, ErrorMessage = "New password must be at least 8 characters long")]
     public string NewPassword { get; init; } = string.Empty;
+
+    [Required(ErrorMessage = "Password confirmation is required")]
+    [MinLength(1, ErrorMessage = "Password confirmation cannot be empty")]
     public string ConfirmPassword { get; init; } = string.Empty;
 }
