@@ -140,6 +140,7 @@ public record UserInfoDto
     public string GivenName { get; init; } = string.Empty;
     public string FamilyName { get; init; } = string.Empty;
     public string[] Roles { get; init; } = Array.Empty<string>();
+    public string[] Permissions { get; init; } = Array.Empty<string>();
     public string[] Scopes { get; init; } = Array.Empty<string>();
     public DateTime? ExpiresAt { get; init; }
     public bool EmailVerified { get; init; }

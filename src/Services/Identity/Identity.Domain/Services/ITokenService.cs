@@ -36,6 +36,8 @@ public class TokenInfo
     public bool MfaEnabled { get; set; }
     public string? WalletAddress { get; set; }
     public IEnumerable<string> Scopes { get; set; } = new List<string>();
+    public IEnumerable<string> Roles { get; set; } = new List<string>();
+    public IEnumerable<string> Permissions { get; set; } = new List<string>();
     public DateTime ExpiresAt { get; set; }
     public string? SessionId { get; set; }
 }

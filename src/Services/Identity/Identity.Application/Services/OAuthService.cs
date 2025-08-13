@@ -236,7 +236,8 @@ public class OAuthService : IOAuthService
                 MfaEnabled = tokenInfo.MfaEnabled,
                 Scopes = tokenInfo.Scopes.ToArray(),
                 ExpiresAt = tokenInfo.ExpiresAt,
-                Roles = Array.Empty<string>() // TODO: Extract roles from claims if needed
+                Roles = tokenInfo.Roles.ToArray(),
+                Permissions = tokenInfo.Permissions.ToArray()
             };
 
             _logger.LogDebug("User info retrieved for token {Token}", accessToken);

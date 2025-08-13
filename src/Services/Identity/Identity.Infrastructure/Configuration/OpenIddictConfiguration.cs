@@ -111,12 +111,18 @@ public static class OpenIddictConfiguration
                 }
 
                 // Configure ASP.NET Core host
-                options.UseAspNetCore()
+                var aspNetCoreBuilder = options.UseAspNetCore()
                        .EnableAuthorizationEndpointPassthrough()
                        .EnableLogoutEndpointPassthrough()
                        .EnableTokenEndpointPassthrough()
                        .EnableUserinfoEndpointPassthrough()
                        .EnableStatusCodePagesIntegration();
+
+                // Disable HTTPS requirement in development
+                if (environment.IsDevelopment())
+                {
+                    aspNetCoreBuilder.DisableTransportSecurityRequirement();
+                }
 
                 // Configure scopes
                 options.RegisterScopes(
@@ -241,6 +247,7 @@ public static class OpenIddictConfiguration
                     Permissions.Endpoints.Logout,
                     Permissions.Endpoints.Token,
                     Permissions.GrantTypes.AuthorizationCode,
+                    Permissions.GrantTypes.Password,
                     Permissions.GrantTypes.RefreshToken,
                     Permissions.ResponseTypes.Code,
                     Permissions.Scopes.Email,

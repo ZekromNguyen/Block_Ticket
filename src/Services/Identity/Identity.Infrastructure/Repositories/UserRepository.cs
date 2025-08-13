@@ -23,6 +23,9 @@ public class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.Sessions)
             .Include(u => u.MfaDevices)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
@@ -31,6 +34,9 @@ public class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.Sessions)
             .Include(u => u.MfaDevices)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 
@@ -39,6 +45,9 @@ public class UserRepository : IUserRepository
         return await _context.Users
             .Include(u => u.Sessions)
             .Include(u => u.MfaDevices)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.WalletAddress == walletAddress, cancellationToken);
     }
 

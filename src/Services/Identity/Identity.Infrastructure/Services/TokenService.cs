@@ -41,6 +41,15 @@ public class TokenService : ITokenService
             var tokenId = GenerateSecureToken();
             var expiresAt = DateTime.UtcNow.AddMinutes(expirationMinutes);
 
+            // Get user roles and permissions
+            var activeRoles = user.GetActiveRoles().ToList();
+            var roleNames = activeRoles.Select(r => r.Name).ToArray();
+            var permissions = activeRoles
+                .SelectMany(r => r.Permissions.Where(p => p.IsActive))
+                .Select(p => $"{p.Resource}:{p.Action}")
+                .Distinct()
+                .ToArray();
+
             // Create claims dictionary
             var claims = new Dictionary<string, object>
             {
@@ -53,7 +62,9 @@ public class TokenService : ITokenService
                 ["mfa_enabled"] = user.MfaEnabled,
                 ["jti"] = Guid.NewGuid().ToString(),
                 ["iat"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ["scope"] = scopes.ToArray()
+                ["scope"] = scopes.ToArray(),
+                ["roles"] = roleNames,
+                ["permissions"] = permissions
             };
 
             // Add wallet address if available
@@ -76,7 +87,7 @@ public class TokenService : ITokenService
 
             await _referenceTokenRepository.AddAsync(referenceToken);
 
-            _logger.LogDebug("Reference access token generated for user {UserId} with ID {TokenId}", user.Id, tokenId);
+            _logger.LogDebug("Reference access token generated for user {UserId} with ID {TokenId} with roles: {Roles}", user.Id, tokenId, string.Join(", ", roleNames));
             return tokenId;
         }
         catch (Exception ex)
@@ -204,6 +215,10 @@ public class TokenService : ITokenService
                 ? referenceToken.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 : Array.Empty<string>();
 
+            // Extract roles and permissions from claims
+            var roles = ExtractStringArrayFromClaims(claims, "roles");
+            var permissions = ExtractStringArrayFromClaims(claims, "permissions");
+
             return new TokenInfo
             {
                 UserId = referenceToken.UserId,
@@ -215,6 +230,8 @@ public class TokenService : ITokenService
                 MfaEnabled = bool.Parse(claims.GetValueOrDefault("mfa_enabled")?.ToString() ?? "false"),
                 WalletAddress = claims.GetValueOrDefault("wallet_address")?.ToString(),
                 Scopes = scopes,
+                Roles = roles,
+                Permissions = permissions,
                 ExpiresAt = referenceToken.ExpiresAt,
                 SessionId = referenceToken.SessionId
             };
@@ -223,6 +240,43 @@ public class TokenService : ITokenService
         {
             _logger.LogError(ex, "Error getting token info for {TokenId}", token);
             return null;
+        }
+    }
+
+    private static string[] ExtractStringArrayFromClaims(Dictionary<string, object> claims, string claimName)
+    {
+        try
+        {
+            var claimValue = claims.GetValueOrDefault(claimName);
+            if (claimValue == null)
+                return Array.Empty<string>();
+
+            // Handle JsonElement array (from deserialization)
+            if (claimValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.Array)
+            {
+                return jsonElement.EnumerateArray()
+                    .Select(e => e.GetString() ?? string.Empty)
+                    .Where(s => !string.IsNullOrEmpty(s))
+                    .ToArray();
+            }
+
+            // Handle string array directly
+            if (claimValue is string[] stringArray)
+            {
+                return stringArray;
+            }
+
+            // Handle single string value
+            if (claimValue is string singleValue)
+            {
+                return new[] { singleValue };
+            }
+
+            return Array.Empty<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
         }
     }
 
@@ -316,7 +370,11 @@ public class TokenService : ITokenService
             Array.Copy(payloadBytes, 0, tokenBytes, 0, payloadBytes.Length);
             Array.Copy(randomBytes, 0, tokenBytes, payloadBytes.Length, randomBytes.Length);
 
-            return Convert.ToBase64String(tokenBytes);
+            // Use URL-safe Base64 encoding
+            return Convert.ToBase64String(tokenBytes)
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
         }
         catch (Exception ex)
         {
@@ -329,7 +387,16 @@ public class TokenService : ITokenService
     {
         try
         {
-            var tokenBytes = Convert.FromBase64String(token);
+            // Convert URL-safe Base64 back to regular Base64
+            var base64Token = token.Replace('-', '+').Replace('_', '/');
+            // Add padding if needed
+            switch (base64Token.Length % 4)
+            {
+                case 2: base64Token += "=="; break;
+                case 3: base64Token += "="; break;
+            }
+
+            var tokenBytes = Convert.FromBase64String(base64Token);
             var payloadBytes = new byte[tokenBytes.Length - 16]; // Remove random bytes
             Array.Copy(tokenBytes, 0, payloadBytes, 0, payloadBytes.Length);
 
@@ -370,7 +437,11 @@ public class TokenService : ITokenService
             Array.Copy(payloadBytes, 0, tokenBytes, 0, payloadBytes.Length);
             Array.Copy(randomBytes, 0, tokenBytes, payloadBytes.Length, randomBytes.Length);
 
-            return Convert.ToBase64String(tokenBytes);
+            // Use URL-safe Base64 encoding
+            return Convert.ToBase64String(tokenBytes)
+                .Replace('+', '-')
+                .Replace('/', '_')
+                .TrimEnd('=');
         }
         catch (Exception ex)
         {
@@ -383,7 +454,16 @@ public class TokenService : ITokenService
     {
         try
         {
-            var tokenBytes = Convert.FromBase64String(token);
+            // Convert URL-safe Base64 back to regular Base64
+            var base64Token = token.Replace('-', '+').Replace('_', '/');
+            // Add padding if needed
+            switch (base64Token.Length % 4)
+            {
+                case 2: base64Token += "=="; break;
+                case 3: base64Token += "="; break;
+            }
+
+            var tokenBytes = Convert.FromBase64String(base64Token);
             var payloadBytes = new byte[tokenBytes.Length - 16];
             Array.Copy(tokenBytes, 0, payloadBytes, 0, payloadBytes.Length);
 

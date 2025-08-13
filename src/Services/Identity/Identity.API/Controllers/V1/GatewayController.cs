@@ -80,9 +80,10 @@ public class GatewayController : ControllerBase
             }
 
             var user = userInfo.Value!;
-            
-            // Get user permissions
+
+            // Get user permissions and roles from database (more reliable than token claims)
             var userPermissions = await GetUserPermissionsAsync(user.Id);
+            var userRoles = await GetUserRolesAsync(user.Id);
 
             var response = new TokenValidationResponse
             {
@@ -90,7 +91,7 @@ public class GatewayController : ControllerBase
                 UserId = user.Id,
                 Email = user.Email,
                 Name = user.Name,
-                Roles = user.Roles,
+                Roles = userRoles,
                 Permissions = userPermissions,
                 Scopes = request.RequiredScopes?.Where(scope => user.Scopes.Contains(scope)).ToArray() ?? Array.Empty<string>(),
                 ExpiresAt = user.ExpiresAt
@@ -172,7 +173,7 @@ public class GatewayController : ControllerBase
     /// <param name="request">Permission check request</param>
     /// <returns>Permission check result</returns>
     [HttpPost("check-permission")]
-    [Authorize(Roles = "api_gateway")]
+    [Authorize(Roles = "api_gateway,super_admin")]
     [EnableRateLimiting("GatewayPolicy")]
     [ProducesResponseType(typeof(PermissionCheckResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -295,6 +296,28 @@ public class GatewayController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting user permissions for user: {UserId}", userId);
+            return Array.Empty<string>();
+        }
+    }
+
+    private async Task<string[]> GetUserRolesAsync(Guid userId)
+    {
+        try
+        {
+            var userRoles = await _roleService.GetUserRolesAsync(userId);
+            if (!userRoles.IsSuccess)
+            {
+                return Array.Empty<string>();
+            }
+
+            return userRoles.Value!
+                .Where(r => r.IsActive && !r.IsExpired)
+                .Select(r => r.RoleName)
+                .ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user roles for user: {UserId}", userId);
             return Array.Empty<string>();
         }
     }

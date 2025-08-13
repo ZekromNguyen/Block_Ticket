@@ -107,6 +107,18 @@ public class ReferenceTokenAuthenticationHandler : AuthenticationHandler<Referen
                 claims.Add(new Claim("scope", scope));
             }
 
+            // Add roles
+            foreach (var role in tokenInfo.Roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            // Add permissions
+            foreach (var permission in tokenInfo.Permissions)
+            {
+                claims.Add(new Claim("permission", permission));
+            }
+
             var identity = new ClaimsIdentity(claims, Scheme.Name);
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);

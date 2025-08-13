@@ -48,23 +48,24 @@ public class AuthenticationService : IAuthenticationService
 
     public async Task<Result<LoginResultDto>> RefreshTokenAsync(RefreshTokenDto refreshTokenDto, string? ipAddress = null, string? userAgent = null)
     {
-        // TODO: Implement RefreshTokenCommand
-        _logger.LogInformation("RefreshTokenAsync called");
-        return Result<LoginResultDto>.Failure("Not implemented yet");
+        var command = new RefreshTokenCommand(
+            refreshTokenDto.RefreshToken,
+            ipAddress,
+            userAgent);
+
+        return await _mediator.Send(command);
     }
 
     public async Task<Result> LogoutAsync(Guid userId, string? sessionId = null)
     {
-        // TODO: Implement LogoutCommand
-        _logger.LogInformation("LogoutAsync called for user {UserId}", userId);
-        return Result.Failure("Not implemented yet");
+        var command = new LogoutCommand(userId, sessionId);
+        return await _mediator.Send(command);
     }
 
     public async Task<Result> LogoutAllSessionsAsync(Guid userId)
     {
-        // TODO: Implement LogoutAllSessionsCommand
-        _logger.LogInformation("LogoutAllSessionsAsync called for user {UserId}", userId);
-        return Result.Failure("Not implemented yet");
+        var command = new LogoutAllSessionsCommand(userId);
+        return await _mediator.Send(command);
     }
 
     public async Task<Result> ConfirmEmailAsync(string token, string email)
