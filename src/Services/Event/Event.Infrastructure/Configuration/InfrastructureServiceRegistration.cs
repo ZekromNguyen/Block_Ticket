@@ -136,6 +136,11 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IEventSeriesRepository, EventSeriesRepository>();
         services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
         services.AddScoped<ISeatRepository, SeatRepository>();
+        
+        // Approval workflow repositories
+        services.AddScoped<IApprovalWorkflowRepository, ApprovalWorkflowRepository>();
+        services.AddScoped<IApprovalWorkflowTemplateRepository, ApprovalWorkflowTemplateRepository>();
+        services.AddScoped<IApprovalAuditLogRepository, ApprovalAuditLogRepository>();
 
         // Register application services
         services.AddHttpContextAccessor();
@@ -155,6 +160,11 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<ISlaMonitoringService, SlaMonitoringService>();
         services.AddScoped<ISeatMapImportExportService, SeatMapImportExportService>();
         services.AddScoped<ISeatMapBulkOperationsService, SeatMapBulkOperationsService>();
+        
+        // Approval workflow services
+        services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
+        services.AddScoped<IApprovalOperationExecutor, ApprovalOperationExecutor>();
+        services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
     }
 
     private static void AddInfrastructureServices(IServiceCollection services)
@@ -212,6 +222,7 @@ public static class InfrastructureServiceRegistration
         services.AddHostedService<EventStatusUpdateService>();
         services.AddHostedService<CacheWarmupService>();
         services.AddHostedService<IdempotencyCleanupService>();
+        services.AddHostedService<ApprovalWorkflowBackgroundService>();
     }
 
     private static void AddRateLimiting(IServiceCollection services, IConfiguration configuration)

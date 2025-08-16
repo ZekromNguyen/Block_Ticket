@@ -1,4 +1,5 @@
 using Event.Domain.Entities;
+using Event.Domain.Models;
 using Event.Infrastructure.Persistence.Entities;
 using Event.Infrastructure.Persistence.Interceptors;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,12 @@ public class EventDbContext : DbContext
     // Infrastructure Entities
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
     public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
+    
+    // Approval Workflow Entities
+    public DbSet<ApprovalWorkflow> ApprovalWorkflows { get; set; } = null!;
+    public DbSet<ApprovalStep> ApprovalSteps { get; set; } = null!;
+    public DbSet<ApprovalWorkflowTemplate> ApprovalWorkflowTemplates { get; set; } = null!;
+    public DbSet<ApprovalAuditLog> ApprovalAuditLogs { get; set; } = null!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
