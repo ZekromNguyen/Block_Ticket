@@ -57,7 +57,16 @@ public class CreateRoleCommandHandler : ICommandHandler<CreateRoleCommand, Resul
             {
                 foreach (var permissionDto in request.Permissions)
                 {
-                    var permission = new Permission(role.Id, permissionDto.Resource, permissionDto.Action, permissionDto.Scope);
+                    // Since permissions should be pre-seeded, we'll create a basic permission
+                    // The proper implementation should use a permission repository to find existing permissions
+                    var permission = new Permission(
+                        permissionDto.Name ?? $"{permissionDto.Resource}:{permissionDto.Action}",
+                        permissionDto.Description ?? $"Permission to {permissionDto.Action} {permissionDto.Resource}",
+                        permissionDto.Resource, 
+                        permissionDto.Action, 
+                        permissionDto.Service ?? "Identity",
+                        permissionDto.Scope);
+                    
                     role.AddPermission(permission);
                 }
             }
@@ -88,7 +97,7 @@ public class CreateRoleCommandHandler : ICommandHandler<CreateRoleCommand, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.Permissions.Select(p => new PermissionDto
+                Permissions = role.GetActivePermissions().Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,
@@ -151,7 +160,16 @@ public class UpdateRoleCommandHandler : ICommandHandler<UpdateRoleCommand, Resul
             role.ClearPermissions();
             foreach (var permissionDto in request.Permissions)
             {
-                var permission = new Permission(role.Id, permissionDto.Resource, permissionDto.Action, permissionDto.Scope);
+                // Since permissions should be pre-seeded, we'll create a basic permission
+                // The proper implementation should use a permission repository to find existing permissions
+                var permission = new Permission(
+                    permissionDto.Name ?? $"{permissionDto.Resource}:{permissionDto.Action}",
+                    permissionDto.Description ?? $"Permission to {permissionDto.Action} {permissionDto.Resource}",
+                    permissionDto.Resource, 
+                    permissionDto.Action, 
+                    permissionDto.Service ?? "Identity",
+                    permissionDto.Scope);
+                
                 role.AddPermission(permission);
             }
 
@@ -181,7 +199,7 @@ public class UpdateRoleCommandHandler : ICommandHandler<UpdateRoleCommand, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.Permissions.Select(p => new PermissionDto
+                Permissions = role.GetActivePermissions().Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,

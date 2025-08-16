@@ -1,3 +1,4 @@
+using MediatR;
 using Shared.Common.Models;
 
 namespace Event.Domain.Events;
@@ -10,7 +11,7 @@ public record EventCreatedDomainEvent(
     string EventName,
     Guid PromoterId,
     DateTime EventDate,
-    Guid VenueId) : IDomainEvent;
+    Guid VenueId) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when an event is updated
@@ -18,7 +19,7 @@ public record EventCreatedDomainEvent(
 public record EventUpdatedDomainEvent(
     Guid EventId,
     string EventName,
-    Dictionary<string, object> Changes) : IDomainEvent;
+    Dictionary<string, object> Changes) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when an event is published
@@ -27,7 +28,7 @@ public record EventPublishedDomainEvent(
     Guid EventId,
     string EventName,
     DateTime PublishedAt,
-    DateTime EventDate) : IDomainEvent;
+    DateTime EventDate) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when an event is cancelled
@@ -36,7 +37,7 @@ public record EventCancelledDomainEvent(
     Guid EventId,
     string EventName,
     DateTime CancelledAt,
-    string Reason) : IDomainEvent;
+    string Reason) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when an event goes on sale
@@ -44,7 +45,7 @@ public record EventCancelledDomainEvent(
 public record EventOnSaleDomainEvent(
     Guid EventId,
     string EventName,
-    DateTime OnSaleDate) : IDomainEvent;
+    DateTime OnSaleDate) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when an event is sold out
@@ -52,7 +53,7 @@ public record EventOnSaleDomainEvent(
 public record EventSoldOutDomainEvent(
     Guid EventId,
     string EventName,
-    DateTime SoldOutAt) : IDomainEvent;
+    DateTime SoldOutAt) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a venue is created
@@ -61,7 +62,7 @@ public record VenueCreatedDomainEvent(
     Guid VenueId,
     string VenueName,
     string Address,
-    int Capacity) : IDomainEvent;
+    int Capacity) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a venue is updated
@@ -69,7 +70,7 @@ public record VenueCreatedDomainEvent(
 public record VenueUpdatedDomainEvent(
     Guid VenueId,
     string VenueName,
-    Dictionary<string, object> Changes) : IDomainEvent;
+    Dictionary<string, object> Changes) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a seat map is imported
@@ -78,7 +79,7 @@ public record SeatMapImportedDomainEvent(
     Guid VenueId,
     string VenueName,
     int TotalSeats,
-    DateTime ImportedAt) : IDomainEvent;
+    DateTime ImportedAt) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when inventory changes
@@ -88,7 +89,7 @@ public record InventoryChangedDomainEvent(
     Guid? TicketTypeId,
     int PreviousQuantity,
     int NewQuantity,
-    string Reason) : IDomainEvent;
+    string Reason) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a reservation is created
@@ -98,7 +99,7 @@ public record ReservationCreatedDomainEvent(
     Guid EventId,
     Guid UserId,
     List<Guid> SeatIds,
-    DateTime ExpiresAt) : IDomainEvent;
+    DateTime ExpiresAt) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a reservation expires
@@ -107,7 +108,7 @@ public record ReservationExpiredDomainEvent(
     Guid ReservationId,
     Guid EventId,
     List<Guid> SeatIds,
-    DateTime ExpiredAt) : IDomainEvent;
+    DateTime ExpiredAt) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a reservation is confirmed
@@ -117,7 +118,7 @@ public record ReservationConfirmedDomainEvent(
     Guid EventId,
     Guid UserId,
     List<Guid> SeatIds,
-    decimal TotalAmount) : IDomainEvent;
+    decimal TotalAmount) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a reservation is cancelled
@@ -125,8 +126,9 @@ public record ReservationConfirmedDomainEvent(
 public record ReservationCancelledDomainEvent(
     Guid ReservationId,
     Guid EventId,
+    Guid UserId,
     List<Guid> SeatIds,
-    string Reason) : IDomainEvent;
+    string Reason) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a pricing rule is created
@@ -136,7 +138,7 @@ public record PricingRuleCreatedDomainEvent(
     Guid EventId,
     string RuleType,
     DateTime EffectiveFrom,
-    DateTime? EffectiveTo) : IDomainEvent;
+    DateTime? EffectiveTo) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a pricing rule is updated
@@ -144,7 +146,7 @@ public record PricingRuleCreatedDomainEvent(
 public record PricingRuleUpdatedDomainEvent(
     Guid PricingRuleId,
     Guid EventId,
-    Dictionary<string, object> Changes) : IDomainEvent;
+    Dictionary<string, object> Changes) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when tickets are restocked
@@ -153,7 +155,7 @@ public record TicketsRestockedDomainEvent(
     Guid EventId,
     Guid? TicketTypeId,
     int Quantity,
-    string Reason) : IDomainEvent;
+    string Reason) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a return window opens
@@ -161,7 +163,7 @@ public record TicketsRestockedDomainEvent(
 public record ReturnWindowOpenedDomainEvent(
     Guid EventId,
     DateTime WindowOpensAt,
-    DateTime WindowClosesAt) : IDomainEvent;
+    DateTime WindowClosesAt) : IDomainEvent, INotification;
 
 /// <summary>
 /// Domain event raised when a hold expires
@@ -170,4 +172,4 @@ public record HoldExpiredDomainEvent(
     Guid EventId,
     Guid AllocationId,
     int ReleasedQuantity,
-    DateTime ExpiredAt) : IDomainEvent;
+    DateTime ExpiredAt) : IDomainEvent, INotification;

@@ -1,4 +1,5 @@
 using Identity.Application.Common.Interfaces;
+using Identity.Domain.Configuration;
 using Identity.Domain.Repositories;
 using Identity.Domain.Services;
 using Identity.Infrastructure.Configuration;
@@ -32,6 +33,10 @@ public static class DependencyInjection
                         errorCodesToAdd: null);
                 });
 
+            // Suppress warning about pending model changes
+            options.ConfigureWarnings(warnings => 
+                warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+
             // Enable sensitive data logging in development
             var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             if (environment == "Development")
@@ -44,18 +49,16 @@ public static class DependencyInjection
         // Add Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Add Repositories
+                // Add Repository Dependencies
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserSessionRepository, UserSessionRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IOAuthClientRepository, OAuthClientRepository>();
         services.AddScoped<IScopeRepository, ScopeRepository>();
-        services.AddScoped<IRoleRepository, RoleRepository>();
-        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
-        services.AddScoped<IAccountLockoutRepository, AccountLockoutRepository>();
-        services.AddScoped<ISuspiciousActivityRepository, SuspiciousActivityRepository>();
         services.AddScoped<IReferenceTokenRepository, ReferenceTokenRepository>();
+        services.AddScoped<IPasswordHistoryRepository, PasswordHistoryRepository>();
 
         // Add Domain Services
         services.AddScoped<IPasswordService, PasswordService>();
@@ -63,11 +66,20 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ISecurityService, SecurityService>();
         services.AddScoped<IRiskAnalysisService, RiskAnalysisService>();
+        services.AddScoped<ISessionManagementService, SessionManagementService>();
+        services.AddScoped<IPasswordHistoryService, PasswordHistoryService>();
 
         // Add External Services
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<ISmsService, SmsService>();
         services.AddScoped<IEncryptionService, EncryptionService>();
+
+        // Add Notification Services
+        services.AddHttpClient<IDiscordNotificationService, DiscordNotificationService>();
+        services.AddScoped<ISecurityNotificationService, SecurityNotificationService>();
+
+        // Add Configuration Options
+        services.Configure<PasswordConfiguration>(configuration.GetSection("Security"));
 
         // Add Caching
         AddCaching(services, configuration);
@@ -82,6 +94,8 @@ public static class DependencyInjection
         services.AddHostedService<SessionCleanupService>();
         services.AddHostedService<AuditLogCleanupService>();
         services.AddHostedService<SecurityMonitoringService>();
+        services.AddHostedService<PasswordHistoryCleanupService>();
+        services.AddHostedService<SecurityNotificationSchedulerService>();
 
         return services;
     }

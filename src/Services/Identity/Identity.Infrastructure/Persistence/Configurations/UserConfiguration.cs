@@ -35,7 +35,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.WalletAddress)
             .IsUnique()
             .HasDatabaseName("IX_Users_WalletAddress")
-            .HasFilter("[WalletAddress] IS NOT NULL");
+            .HasFilter("\"WalletAddress\" IS NOT NULL");
 
         // Configure other properties
         builder.Property(u => u.FirstName)
@@ -98,7 +98,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => u.LockedOutUntil)
             .HasDatabaseName("IX_Users_LockedOutUntil")
-            .HasFilter("[LockedOutUntil] IS NOT NULL");
+            .HasFilter("\"LockedOutUntil\" IS NOT NULL");
 
         // Configure audit fields
         builder.Property(u => u.CreatedAt)

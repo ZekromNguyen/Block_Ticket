@@ -45,7 +45,7 @@ public class TokenService : ITokenService
             var activeRoles = user.GetActiveRoles().ToList();
             var roleNames = activeRoles.Select(r => r.Name).ToArray();
             var permissions = activeRoles
-                .SelectMany(r => r.Permissions.Where(p => p.IsActive))
+                .SelectMany(r => r.GetActivePermissions().Where(p => p.IsActive))
                 .Select(p => $"{p.Resource}:{p.Action}")
                 .Distinct()
                 .ToArray();

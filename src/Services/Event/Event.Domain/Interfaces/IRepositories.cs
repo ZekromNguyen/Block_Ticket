@@ -13,12 +13,21 @@ public interface IRepository<T> where T : class
     Task UpdateAsync(T entity, CancellationToken cancellationToken = default);
     Task DeleteAsync(T entity, CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default);
+
+    // Additional methods needed by Application layer
+    void Update(T entity);
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync(
+        int pageNumber,
+        int pageSize,
+        System.Linq.Expressions.Expression<Func<T, bool>>? predicate = null,
+        Func<IQueryable<T>, IOrderedQueryable<T>>? orderBy = null);
 }
 
 /// <summary>
 /// Repository interface for Event aggregate
 /// </summary>
-public interface IEventRepository : IRepository<EventAggregate>
+public interface IEventRepository : IRepository<EventAggregate>, ICursorRepository<EventAggregate>
 {
     Task<EventAggregate?> GetBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default);
     Task<IEnumerable<EventAggregate>> GetByPromoterId(Guid promoterId, CancellationToken cancellationToken = default);
@@ -37,6 +46,9 @@ public interface IEventRepository : IRepository<EventAggregate>
         CancellationToken cancellationToken = default);
     Task<bool> IsSlugUniqueAsync(string slug, Guid organizationId, Guid? excludeEventId = null, CancellationToken cancellationToken = default);
     Task<int> GetTotalEventsCountAsync(Guid? promoterId = null, CancellationToken cancellationToken = default);
+
+    // Additional methods needed by Application layer
+    Task<EventAggregate?> GetWithFullDetailsAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -47,6 +59,7 @@ public interface IVenueRepository : IRepository<Venue>
     Task<IEnumerable<Venue>> GetByLocationAsync(string city, string? state = null, string? country = null, CancellationToken cancellationToken = default);
     Task<Venue?> GetWithSeatMapAsync(Guid venueId, CancellationToken cancellationToken = default);
     Task<bool> HasActiveEventsAsync(Guid venueId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Venue>> GetByIdsAsync(IEnumerable<Guid> venueIds, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -61,16 +74,7 @@ public interface IReservationRepository : IRepository<Reservation>
     Task<bool> HasActiveReservationForSeatsAsync(List<Guid> seatIds, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Repository interface for PricingRule aggregate
-/// </summary>
-public interface IPricingRuleRepository : IRepository<PricingRule>
-{
-    Task<IEnumerable<PricingRule>> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<PricingRule>> GetActiveRulesAsync(Guid eventId, DateTime effectiveDate, CancellationToken cancellationToken = default);
-    Task<PricingRule?> GetByDiscountCodeAsync(string discountCode, CancellationToken cancellationToken = default);
-    Task<bool> HasOverlappingRulesAsync(Guid eventId, DateTime startDate, DateTime endDate, Guid? excludeRuleId = null, CancellationToken cancellationToken = default);
-}
+
 
 /// <summary>
 /// Repository interface for EventSeries aggregate
@@ -79,6 +83,11 @@ public interface IEventSeriesRepository : IRepository<EventSeries>
 {
     Task<IEnumerable<EventSeries>> GetByPromoterId(Guid promoterId, CancellationToken cancellationToken = default);
     Task<EventSeries?> GetWithEventsAsync(Guid seriesId, CancellationToken cancellationToken = default);
+    Task<EventSeries?> GetBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default);
+    Task<bool> IsSlugUniqueAsync(string slug, Guid organizationId, Guid? excludeSeriesId = null, CancellationToken cancellationToken = default);
+
+    // Compatibility method for Application layer
+    Task<EventSeries?> GetAsync(Guid seriesId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

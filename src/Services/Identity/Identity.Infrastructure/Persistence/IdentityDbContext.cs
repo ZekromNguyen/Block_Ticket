@@ -18,16 +18,21 @@ public class IdentityDbContext : DbContext
     public DbSet<Scope> Scopes { get; set; } = null!;
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<Permission> Permissions { get; set; } = null!;
+    public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<UserRole> UserRoles { get; set; } = null!;
     public DbSet<SecurityEvent> SecurityEvents { get; set; } = null!;
     public DbSet<AccountLockout> AccountLockouts { get; set; } = null!;
     public DbSet<SuspiciousActivity> SuspiciousActivities { get; set; } = null!;
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
     public DbSet<ReferenceToken> ReferenceTokens { get; set; } = null!;
+    public DbSet<PasswordHistory> PasswordHistory { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Set default schema
+        modelBuilder.HasDefaultSchema("identity");
 
         // Apply all configurations
         modelBuilder.ApplyConfiguration(new UserConfiguration());
@@ -37,12 +42,14 @@ public class IdentityDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ScopeConfiguration());
         modelBuilder.ApplyConfiguration(new RoleConfiguration());
         modelBuilder.ApplyConfiguration(new PermissionConfiguration());
+        modelBuilder.ApplyConfiguration(new RolePermissionConfiguration());
         modelBuilder.ApplyConfiguration(new UserRoleConfiguration());
         modelBuilder.ApplyConfiguration(new SecurityEventConfiguration());
         modelBuilder.ApplyConfiguration(new AccountLockoutConfiguration());
         modelBuilder.ApplyConfiguration(new SuspiciousActivityConfiguration());
         modelBuilder.ApplyConfiguration(new AuditLogConfiguration());
         modelBuilder.ApplyConfiguration(new ReferenceTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new PasswordHistoryConfiguration());
 
         // Configure OpenIddict entities
         modelBuilder.UseOpenIddict();

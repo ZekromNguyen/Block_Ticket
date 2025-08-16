@@ -1,0 +1,51 @@
+---
+description: Enterprise project rules for clean code, testing, security, and collaboration
+globs: ["**/*.cs", "**/*.ts", "**/*.java", "**/*.js"] # adjust languages as needed
+alwaysApply: true
+---
+
+# 📋 Project Rules for Cursor Agent
+
+## 1. Code Discipline
+- Before generating code, read the codebase and check if functionality already exists.  
+- If it exists → update or extend. If not → create new code following existing patterns.  
+- Follow Clean Architecture:
+  - Controllers → request/response handling only  
+  - Services → business logic with proper validation & logging  
+  - Repositories → database access with ORM/queries  
+  - DTOs/Models → data only, no logic  
+
+## 2. Naming & Structure
+- Follow project naming conventions (PascalCase for classes, camelCase for variables).  
+- Use descriptive names — no abbreviations unless standard.  
+- Keep project structure consistent; do not create random new folders.  
+
+## 3. Quality & Testing
+- After writing code, **test it locally** to ensure no bugs.  
+- Run unit and integration tests before committing.  
+- No code should break build or tests.  
+- Validate all inputs and handle errors gracefully.  
+
+## 4. Security & Config
+- Never hardcode secrets (API keys, passwords, connection strings).  
+- Use environment variables or config files.  
+- Enforce authentication/authorization checks where needed.  
+- Sanitize user input before database queries or logging.  
+
+## 5. Git & Workflow
+- Use feature branches → never commit directly to `main`/`master`.  
+- Commit messages must follow Conventional Commits (`feat:`, `fix:`, `refactor:`, etc.).  
+- Always pull latest changes before starting new work.  
+- All PRs must go through review before merge.  
+
+## 6. Documentation
+- Add comments for complex logic.  
+- Update README/API docs whenever new features are added.  
+- Write clear commit messages and PR descriptions.  
+
+## 7. Workflow Checklist
+1. Check if functionality already exists → reuse or update if possible.  
+2. Write clean, consistent code that matches project conventions.  
+3. Test locally until bug-free.  
+4. Commit changes with a meaningful message.  
+5. Push to feature branch and create PR for review.  

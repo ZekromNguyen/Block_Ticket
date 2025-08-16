@@ -175,6 +175,39 @@ public class EventSeries : BaseAuditableEntity
         Version++;
     }
 
+    public void SetImageUrl(string? imageUrl)
+    {
+        ImageUrl = imageUrl?.Trim();
+        Version++;
+    }
+
+    public void SetBannerUrl(string? bannerUrl)
+    {
+        BannerUrl = bannerUrl?.Trim();
+        Version++;
+    }
+
+    public void SetSeriesDateRange(DateTime? startDate, DateTime? endDate)
+    {
+        if (startDate.HasValue && endDate.HasValue && endDate <= startDate)
+            throw new EventDomainException("Series end date must be after start date");
+
+        SeriesStartDate = startDate;
+        SeriesEndDate = endDate;
+        Version++;
+    }
+
+    // Overload for Application layer compatibility
+    public void SetSeriesDateRange(DateTimeRange dateRange)
+    {
+        SeriesStartDate = dateRange.StartDate;
+        SeriesEndDate = dateRange.EndDate;
+        Version++;
+    }
+
+    // Property for compatibility with Application layer
+    public DateTimeRange? SeriesDateRange => GetSeriesDateRange();
+
     public void Activate()
     {
         if (!IsActive)

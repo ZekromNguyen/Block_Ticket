@@ -97,6 +97,12 @@ public record TimeZoneId
 {
     public string Value { get; }
 
+    // For EF Core
+    private TimeZoneId()
+    {
+        Value = string.Empty;
+    }
+
     public TimeZoneId(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -117,6 +123,8 @@ public record TimeZoneId
 
     public TimeZoneInfo GetTimeZoneInfo() => TimeZoneInfo.FindSystemTimeZoneById(Value);
 
+    public static TimeZoneId FromString(string value) => new(value);
+
     public static implicit operator string(TimeZoneId timeZoneId) => timeZoneId.Value;
     public static implicit operator TimeZoneId(string value) => new(value);
 }
@@ -127,6 +135,12 @@ public record TimeZoneId
 public record Slug
 {
     public string Value { get; }
+
+    // For EF Core
+    private Slug()
+    {
+        Value = string.Empty;
+    }
 
     public Slug(string value)
     {
@@ -182,11 +196,14 @@ public record GeoCoordinates
     public double Latitude { get; }
     public double Longitude { get; }
 
+    // For EF Core
+    private GeoCoordinates() { }
+
     public GeoCoordinates(double latitude, double longitude)
     {
         if (latitude < -90 || latitude > 90)
             throw new ArgumentException("Latitude must be between -90 and 90", nameof(latitude));
-        
+
         if (longitude < -180 || longitude > 180)
             throw new ArgumentException("Longitude must be between -180 and 180", nameof(longitude));
 

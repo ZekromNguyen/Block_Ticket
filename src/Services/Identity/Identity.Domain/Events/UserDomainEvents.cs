@@ -24,10 +24,16 @@ public record UserMfaDisabledDomainEvent(Guid UserId, string Email) : IDomainEve
 
 public record UserMfaDeviceAddedDomainEvent(Guid UserId, string DeviceType) : IDomainEvent;
 
-public record UserMfaDeviceRemovedDomainEvent(Guid UserId, string DeviceType) : IDomainEvent;
+public record UserSessionCreatedDomainEvent(Guid UserId, Guid SessionId, string DeviceInfo, string IpAddress) : IDomainEvent;
+
+public record UserSessionEndedDomainEvent(Guid UserId, Guid SessionId, string Reason) : IDomainEvent;
 
 public record UserAllSessionsEndedDomainEvent(Guid UserId) : IDomainEvent;
 
+public record UserSessionLimitExceededDomainEvent(Guid UserId, int MaxAllowed, int CurrentActive) : IDomainEvent;
+
 public record UserRoleAssignedDomainEvent(Guid UserId, Guid RoleId) : IDomainEvent;
+
+public record UserMfaDeviceRemovedDomainEvent(Guid UserId, string DeviceType) : IDomainEvent;
 
 public record UserRoleRemovedDomainEvent(Guid UserId, Guid RoleId) : IDomainEvent;

@@ -12,6 +12,16 @@ public record Address
     public string Country { get; }
     public GeoCoordinates? Coordinates { get; }
 
+    // For EF Core
+    private Address()
+    {
+        Street = string.Empty;
+        City = string.Empty;
+        State = string.Empty;
+        PostalCode = string.Empty;
+        Country = string.Empty;
+    }
+
     public Address(
         string street,
         string city,
@@ -22,16 +32,16 @@ public record Address
     {
         if (string.IsNullOrWhiteSpace(street))
             throw new ArgumentException("Street cannot be null or empty", nameof(street));
-        
+
         if (string.IsNullOrWhiteSpace(city))
             throw new ArgumentException("City cannot be null or empty", nameof(city));
-        
+
         if (string.IsNullOrWhiteSpace(state))
             throw new ArgumentException("State cannot be null or empty", nameof(state));
-        
+
         if (string.IsNullOrWhiteSpace(postalCode))
             throw new ArgumentException("Postal code cannot be null or empty", nameof(postalCode));
-        
+
         if (string.IsNullOrWhiteSpace(country))
             throw new ArgumentException("Country cannot be null or empty", nameof(country));
 
@@ -63,14 +73,22 @@ public record SeatPosition
     public string Row { get; }
     public string Number { get; }
 
+    // For EF Core
+    private SeatPosition()
+    {
+        Section = string.Empty;
+        Row = string.Empty;
+        Number = string.Empty;
+    }
+
     public SeatPosition(string section, string row, string number)
     {
         if (string.IsNullOrWhiteSpace(section))
             throw new ArgumentException("Section cannot be null or empty", nameof(section));
-        
+
         if (string.IsNullOrWhiteSpace(row))
             throw new ArgumentException("Row cannot be null or empty", nameof(row));
-        
+
         if (string.IsNullOrWhiteSpace(number))
             throw new ArgumentException("Number cannot be null or empty", nameof(number));
 
@@ -107,6 +125,12 @@ public record DateTimeRange
         StartDate = startDate;
         EndDate = endDate;
         TimeZone = timeZone;
+    }
+
+    // Overloaded constructor with UTC as default timezone
+    public DateTimeRange(DateTime startDate, DateTime endDate)
+        : this(startDate, endDate, new TimeZoneId("UTC"))
+    {
     }
 
     public TimeSpan Duration => EndDate - StartDate;

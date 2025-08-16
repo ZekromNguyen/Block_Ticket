@@ -194,7 +194,7 @@ public class Reservation : BaseAuditableEntity
                            .Select(i => i.SeatId!.Value)
                            .ToList();
 
-        AddDomainEvent(new ReservationCancelledDomainEvent(Id, EventId, seatIds, reason));
+        AddDomainEvent(new ReservationCancelledDomainEvent(Id, EventId, UserId, seatIds, reason));
     }
 
     public void Expire()

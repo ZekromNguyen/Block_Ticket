@@ -1,7 +1,9 @@
+using Event.Domain.Common;
 using Event.Domain.Enums;
 using Event.Domain.Events;
 using Event.Domain.Exceptions;
 using Event.Domain.ValueObjects;
+using NpgsqlTypes;
 using Shared.Common.Models;
 
 namespace Event.Domain.Entities;
@@ -9,7 +11,7 @@ namespace Event.Domain.Entities;
 /// <summary>
 /// Event aggregate root - represents a ticketed event
 /// </summary>
-public class EventAggregate : BaseAuditableEntity
+public class EventAggregate : ETaggableEntity
 {
     private readonly List<TicketType> _ticketTypes = new();
     private readonly List<PricingRule> _pricingRules = new();
@@ -40,7 +42,10 @@ public class EventAggregate : BaseAuditableEntity
     // Versioning
     public int Version { get; private set; }
     public string? ChangeHistory { get; private set; } // JSON
-    
+
+    // Search (PostgreSQL specific)
+    public NpgsqlTypes.NpgsqlTsVector SearchVector { get; private set; } = null!;
+
     // Navigation Properties
     public IReadOnlyCollection<TicketType> TicketTypes => _ticketTypes.AsReadOnly();
     public IReadOnlyCollection<PricingRule> PricingRules => _pricingRules.AsReadOnly();
@@ -123,11 +128,19 @@ public class EventAggregate : BaseAuditableEntity
     {
         if (publishEnd <= publishStart)
             throw new EventDomainException("Publish end date must be after start date");
-        
+
         if (publishStart >= EventDate)
             throw new EventDomainException("Publish window must end before event date");
 
         PublishWindow = new DateTimeRange(publishStart, publishEnd, TimeZone);
+    }
+
+    // Overload for Application layer compatibility
+    public void SetPublishWindow(DateTime publishStart)
+    {
+        // Default to 24 hours before event date
+        var publishEnd = EventDate.AddHours(-1);
+        SetPublishWindow(publishStart, publishEnd);
     }
 
     public void AddCategory(string category)
@@ -178,21 +191,113 @@ public class EventAggregate : BaseAuditableEntity
         SeoDescription = seoDescription?.Trim();
     }
 
+    // Individual update methods for Application layer
+    public void UpdateTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            throw new EventDomainException("Event title cannot be empty");
+
+        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
+            throw new EventDomainException("Cannot update cancelled or completed events");
+
+        Title = title.Trim();
+        Version++;
+    }
+
+    public void UpdateDescription(string description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            throw new EventDomainException("Event description cannot be empty");
+
+        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
+            throw new EventDomainException("Cannot update cancelled or completed events");
+
+        Description = description.Trim();
+        Version++;
+    }
+
+    public void UpdateEventDate(DateTime eventDate)
+    {
+        if (eventDate <= DateTime.UtcNow)
+            throw new EventDomainException("Event date must be in the future");
+
+        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
+            throw new EventDomainException("Cannot update cancelled or completed events");
+
+        EventDate = eventDate;
+        Version++;
+    }
+
+    public void UpdateTimeZone(TimeZoneId timeZone)
+    {
+        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
+            throw new EventDomainException("Cannot update cancelled or completed events");
+
+        TimeZone = timeZone;
+        Version++;
+    }
+
+    public void SetImageUrl(string? imageUrl)
+    {
+        ImageUrl = imageUrl?.Trim();
+        Version++;
+    }
+
+    public void SetBannerUrl(string? bannerUrl)
+    {
+        BannerUrl = bannerUrl?.Trim();
+        Version++;
+    }
+
+    public void SetSeoMetadata(string? seoTitle, string? seoDescription)
+    {
+        SeoTitle = seoTitle?.Trim();
+        SeoDescription = seoDescription?.Trim();
+        Version++;
+    }
+
+    public void ClearCategories()
+    {
+        _categories.Clear();
+        Version++;
+    }
+
+    public void ClearTags()
+    {
+        _tags.Clear();
+        Version++;
+    }
+
     public void Publish()
     {
         if (Status != EventStatus.Draft && Status != EventStatus.Review)
             throw new EventDomainException($"Cannot publish event in {Status} status");
-        
+
         if (!_ticketTypes.Any())
             throw new EventDomainException("Cannot publish event without ticket types");
-        
+
         if (PublishWindow == null)
             throw new EventDomainException("Cannot publish event without publish window");
 
         Status = EventStatus.Published;
         Version++;
-        
+
         AddDomainEvent(new EventPublishedDomainEvent(Id, Title, DateTime.UtcNow, EventDate));
+    }
+
+    // Overload for Application layer
+    public void Publish(DateTime publishedAt)
+    {
+        if (Status != EventStatus.Draft && Status != EventStatus.Review)
+            throw new EventDomainException($"Cannot publish event in {Status} status");
+
+        if (!_ticketTypes.Any())
+            throw new EventDomainException("Cannot publish event without ticket types");
+
+        Status = EventStatus.Published;
+        Version++;
+
+        AddDomainEvent(new EventPublishedDomainEvent(Id, Title, publishedAt, EventDate));
     }
 
     public void StartSale()
@@ -214,8 +319,20 @@ public class EventAggregate : BaseAuditableEntity
 
         Status = EventStatus.Cancelled;
         Version++;
-        
+
         AddDomainEvent(new EventCancelledDomainEvent(Id, Title, DateTime.UtcNow, reason));
+    }
+
+    // Overload for Application layer
+    public void Cancel(string reason, DateTime cancelledAt)
+    {
+        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
+            throw new EventDomainException($"Cannot cancel event in {Status} status");
+
+        Status = EventStatus.Cancelled;
+        Version++;
+
+        AddDomainEvent(new EventCancelledDomainEvent(Id, Title, cancelledAt, reason));
     }
 
     public void Complete()
@@ -300,6 +417,16 @@ public class EventAggregate : BaseAuditableEntity
         return _ticketTypes.Any(tt => tt.IsAvailable());
     }
 
+    public int GetAvailableCapacity()
+    {
+        return _ticketTypes.Sum(tt => tt.Capacity.Available);
+    }
+
+    public int GetTotalCapacity()
+    {
+        return _ticketTypes.Sum(tt => tt.Capacity.Total);
+    }
+
     public void CheckAndUpdateSoldOutStatus()
     {
         if (Status == EventStatus.OnSale && !HasAvailableTickets())
@@ -307,5 +434,32 @@ public class EventAggregate : BaseAuditableEntity
             Status = EventStatus.SoldOut;
             AddDomainEvent(new EventSoldOutDomainEvent(Id, Title, DateTime.UtcNow));
         }
+    }
+
+    /// <summary>
+    /// Override to include event-specific data in ETag calculation
+    /// </summary>
+    protected override object? GetAdditionalETagData()
+    {
+        return new
+        {
+            Title,
+            Status,
+            Version,
+            EventDate,
+            TotalCapacity = GetTotalCapacity(),
+            AvailableCapacity = GetAvailableCapacity(),
+            TicketTypeCount = _ticketTypes.Count,
+            PricingRuleCount = _pricingRules.Count,
+            AllocationCount = _allocations.Count,
+            // Include critical inventory data
+            InventorySnapshot = _ticketTypes.Select(tt => new
+            {
+                tt.Id,
+                Total = tt.Capacity.Total,
+                Reserved = tt.Capacity.Reserved,
+                Available = tt.Capacity.Available
+            }).ToList()
+        };
     }
 }

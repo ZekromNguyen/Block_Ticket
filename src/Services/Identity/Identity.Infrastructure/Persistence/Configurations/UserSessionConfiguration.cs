@@ -36,7 +36,7 @@ public class UserSessionConfiguration : IEntityTypeConfiguration<UserSession>
         builder.HasIndex(s => s.RefreshToken)
             .IsUnique()
             .HasDatabaseName("IX_UserSessions_RefreshToken")
-            .HasFilter("[RefreshToken] IS NOT NULL");
+            .HasFilter("\"RefreshToken\" IS NOT NULL");
 
         builder.HasIndex(s => s.ExpiresAt)
             .HasDatabaseName("IX_UserSessions_ExpiresAt");

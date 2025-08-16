@@ -17,6 +17,7 @@ namespace Identity.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasDefaultSchema("identity")
                 .HasAnnotation("ProductVersion", "9.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -98,7 +99,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "IsActive")
                         .HasDatabaseName("IX_AccountLockouts_UserId_IsActive");
 
-                    b.ToTable("AccountLockouts", (string)null);
+                    b.ToTable("AccountLockouts", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.AuditLog", b =>
@@ -207,7 +208,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("IX_AuditLogs_UserId_CreatedAt");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.MfaDevice", b =>
@@ -282,7 +283,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "Type", "IsActive")
                         .HasDatabaseName("IX_MfaDevices_UserId_Type_IsActive");
 
-                    b.ToTable("MfaDevices", (string)null);
+                    b.ToTable("MfaDevices", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.OAuthClient", b =>
@@ -401,7 +402,58 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("Type")
                         .HasDatabaseName("IX_OAuthClients_Type");
 
-                    b.ToTable("OAuthClients", (string)null);
+                    b.ToTable("OAuthClients", "identity");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.PasswordHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_PasswordHistory_UserId");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_PasswordHistory_UserId_CreatedAt");
+
+                    b.HasIndex("UserId", "PasswordHash")
+                        .HasDatabaseName("IX_PasswordHistory_UserId_PasswordHash");
+
+                    b.ToTable("PasswordHistory", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Permission", b =>
@@ -412,8 +464,8 @@ namespace Identity.Infrastructure.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -421,18 +473,39 @@ namespace Identity.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Resource")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Scope")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
@@ -444,29 +517,17 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Action")
-                        .HasDatabaseName("IX_Permissions_Action");
-
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("IX_Permissions_CreatedAt");
-
                     b.HasIndex("IsActive")
                         .HasDatabaseName("IX_Permissions_IsActive");
 
-                    b.HasIndex("Resource")
-                        .HasDatabaseName("IX_Permissions_Resource");
-
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("IX_Permissions_RoleId");
-
-                    b.HasIndex("Resource", "Action")
-                        .HasDatabaseName("IX_Permissions_Resource_Action");
-
-                    b.HasIndex("RoleId", "Resource", "Action")
+                    b.HasIndex("Name")
                         .IsUnique()
-                        .HasDatabaseName("IX_Permissions_RoleId_Resource_Action");
+                        .HasDatabaseName("IX_Permissions_Name");
 
-                    b.ToTable("Permissions", (string)null);
+                    b.HasIndex("Service", "Resource", "Action")
+                        .HasDatabaseName("IX_Permissions_Service_Resource_Action");
+
+                    b.ToTable("Permissions", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.ReferenceToken", b =>
@@ -578,7 +639,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "TokenType", "IsRevoked")
                         .HasDatabaseName("IX_ReferenceTokens_UserId_TokenType_IsRevoked");
 
-                    b.ToTable("ReferenceTokens", (string)null);
+                    b.ToTable("ReferenceTokens", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Role", b =>
@@ -623,6 +684,11 @@ namespace Identity.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
 
@@ -652,6 +718,10 @@ namespace Identity.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Roles_Name");
 
+                    b.HasIndex("NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Roles_NormalizedName");
+
                     b.HasIndex("Priority")
                         .HasDatabaseName("IX_Roles_Priority");
 
@@ -661,7 +731,64 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("IsActive", "Priority")
                         .HasDatabaseName("IX_Roles_IsActive_Priority");
 
-                    b.ToTable("Roles", (string)null);
+                    b.ToTable("Roles", "identity");
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("GrantedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GrantedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_RolePermissions_ExpiresAt");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_RolePermissions_IsActive");
+
+                    b.HasIndex("PermissionId")
+                        .HasDatabaseName("IX_RolePermissions_PermissionId");
+
+                    b.HasIndex("RoleId")
+                        .HasDatabaseName("IX_RolePermissions_RoleId");
+
+                    b.HasIndex("RoleId", "PermissionId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RolePermissions_RoleId_PermissionId");
+
+                    b.ToTable("RolePermissions", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Scope", b =>
@@ -741,7 +868,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("Type")
                         .HasDatabaseName("IX_Scopes_Type");
 
-                    b.ToTable("Scopes", (string)null);
+                    b.ToTable("Scopes", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.SecurityEvent", b =>
@@ -861,7 +988,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "EventType", "CreatedAt")
                         .HasDatabaseName("IX_SecurityEvents_UserId_EventType_CreatedAt");
 
-                    b.ToTable("SecurityEvents", (string)null);
+                    b.ToTable("SecurityEvents", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.SuspiciousActivity", b =>
@@ -963,7 +1090,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "CreatedAt")
                         .HasDatabaseName("IX_SuspiciousActivities_UserId_CreatedAt");
 
-                    b.ToTable("SuspiciousActivities", (string)null);
+                    b.ToTable("SuspiciousActivities", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.User", b =>
@@ -1062,7 +1189,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasIndex("LockedOutUntil")
                         .HasDatabaseName("IX_Users_LockedOutUntil")
-                        .HasFilter("[LockedOutUntil] IS NOT NULL");
+                        .HasFilter("\"LockedOutUntil\" IS NOT NULL");
 
                     b.HasIndex("MfaEnabled")
                         .HasDatabaseName("IX_Users_MfaEnabled");
@@ -1076,9 +1203,9 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("WalletAddress")
                         .IsUnique()
                         .HasDatabaseName("IX_Users_WalletAddress")
-                        .HasFilter("[WalletAddress] IS NOT NULL");
+                        .HasFilter("\"WalletAddress\" IS NOT NULL");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.UserRole", b =>
@@ -1147,7 +1274,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "RoleId")
                         .HasDatabaseName("IX_UserRoles_UserId_RoleId");
 
-                    b.ToTable("UserRoles", (string)null);
+                    b.ToTable("UserRoles", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.UserSession", b =>
@@ -1208,7 +1335,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("RefreshToken")
                         .IsUnique()
                         .HasDatabaseName("IX_UserSessions_RefreshToken")
-                        .HasFilter("[RefreshToken] IS NOT NULL");
+                        .HasFilter("\"RefreshToken\" IS NOT NULL");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_UserSessions_UserId");
@@ -1216,7 +1343,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("UserId", "EndedAt")
                         .HasDatabaseName("IX_UserSessions_UserId_EndedAt");
 
-                    b.ToTable("UserSessions", (string)null);
+                    b.ToTable("UserSessions", "identity");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication", b =>
@@ -1281,7 +1408,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("ClientId")
                         .IsUnique();
 
-                    b.ToTable("OpenIddictApplications", (string)null);
+                    b.ToTable("OpenIddictApplications", "identity");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization", b =>
@@ -1323,7 +1450,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasIndex("ApplicationId", "Status", "Subject", "Type");
 
-                    b.ToTable("OpenIddictAuthorizations", (string)null);
+                    b.ToTable("OpenIddictAuthorizations", "identity");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreScope", b =>
@@ -1364,7 +1491,7 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("OpenIddictScopes", (string)null);
+                    b.ToTable("OpenIddictScopes", "identity");
                 });
 
             modelBuilder.Entity("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreToken", b =>
@@ -1424,7 +1551,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasIndex("ApplicationId", "Status", "Subject", "Type");
 
-                    b.ToTable("OpenIddictTokens", (string)null);
+                    b.ToTable("OpenIddictTokens", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.MfaDevice", b =>
@@ -1436,13 +1563,15 @@ namespace Identity.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Identity.Domain.Entities.Permission", b =>
+            modelBuilder.Entity("Identity.Domain.Entities.PasswordHistory", b =>
                 {
-                    b.HasOne("Identity.Domain.Entities.Role", null)
-                        .WithMany("Permissions")
-                        .HasForeignKey("RoleId")
+                    b.HasOne("Identity.Domain.Entities.User", "User")
+                        .WithMany("PasswordHistory")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.ReferenceToken", b =>
@@ -1452,6 +1581,25 @@ namespace Identity.Infrastructure.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Identity.Domain.Entities.RolePermission", b =>
+                {
+                    b.HasOne("Identity.Domain.Entities.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Identity.Domain.Entities.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.UserRole", b =>
@@ -1504,9 +1652,14 @@ namespace Identity.Infrastructure.Migrations
                     b.Navigation("Authorization");
                 });
 
+            modelBuilder.Entity("Identity.Domain.Entities.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
             modelBuilder.Entity("Identity.Domain.Entities.Role", b =>
                 {
-                    b.Navigation("Permissions");
+                    b.Navigation("RolePermissions");
 
                     b.Navigation("UserRoles");
                 });
@@ -1514,6 +1667,8 @@ namespace Identity.Infrastructure.Migrations
             modelBuilder.Entity("Identity.Domain.Entities.User", b =>
                 {
                     b.Navigation("MfaDevices");
+
+                    b.Navigation("PasswordHistory");
 
                     b.Navigation("Sessions");
 

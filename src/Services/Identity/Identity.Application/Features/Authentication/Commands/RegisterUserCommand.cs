@@ -195,9 +195,9 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
             // Map UserType to role name
             string roleName = userType switch
             {
-                UserType.Fan => "fan",
-                UserType.Promoter => "promoter",
-                UserType.Admin => "admin",
+                UserType.Fan => "Fan",
+                UserType.Promoter => "Promoter",
+                UserType.Admin => "Admin",
                 _ => "fan" // Default to fan role
             };
 

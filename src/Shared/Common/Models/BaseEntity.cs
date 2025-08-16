@@ -1,6 +1,8 @@
+using MediatR;
+
 namespace Shared.Common.Models;
 
-public interface IDomainEvent
+public interface IDomainEvent : INotification
 {
     Guid Id => Guid.NewGuid();
     DateTime OccurredOn => DateTime.UtcNow;
@@ -18,7 +20,7 @@ public abstract class BaseEntity
 
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
-    protected void AddDomainEvent(IDomainEvent domainEvent)
+    public void AddDomainEvent(IDomainEvent domainEvent)
     {
         _domainEvents.Add(domainEvent);
     }
@@ -34,4 +36,10 @@ public abstract class BaseAuditableEntity : BaseEntity
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
     public string? DeletedBy { get; set; }
+
+    public virtual void Delete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
 }

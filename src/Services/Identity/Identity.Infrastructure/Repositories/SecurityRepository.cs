@@ -229,6 +229,24 @@ public class AccountLockoutRepository : IAccountLockoutRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<AccountLockout>> GetLockoutsAsync(Guid? userId = null, DateTime? from = null, DateTime? to = null, CancellationToken cancellationToken = default)
+    {
+        var query = _context.AccountLockouts.AsQueryable();
+
+        if (userId.HasValue)
+            query = query.Where(l => l.UserId == userId.Value);
+
+        if (from.HasValue)
+            query = query.Where(l => l.LockedAt >= from.Value);
+
+        if (to.HasValue)
+            query = query.Where(l => l.LockedAt <= to.Value);
+
+        return await query
+            .OrderByDescending(l => l.LockedAt)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IEnumerable<AccountLockout>> GetExpiredLockoutsAsync(TimeSpan lockoutDuration, CancellationToken cancellationToken = default)
     {
         var cutoffTime = DateTime.UtcNow.Subtract(lockoutDuration);

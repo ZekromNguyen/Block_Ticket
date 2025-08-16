@@ -38,6 +38,9 @@ public class Allocation : BaseAuditableEntity
     // Status
     public bool IsActive { get; private set; }
     public bool IsExpired => ExpiresAt.HasValue && DateTime.UtcNow > ExpiresAt.Value;
+
+    // Compatibility properties for Application layer
+    public int Quantity => TotalQuantity;
     
     // Navigation Properties
     public IReadOnlyCollection<Guid> AllocatedSeatIds => _allocatedSeatIds.AsReadOnly();

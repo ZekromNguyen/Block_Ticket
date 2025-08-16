@@ -4,10 +4,8 @@ namespace Identity.Domain.Entities;
 
 public class Role : BaseAuditableEntity
 {
-    private readonly List<Permission> _permissions = new();
-    private readonly List<UserRole> _userRoles = new();
-
     public string Name { get; private set; } = string.Empty;
+    public string NormalizedName { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public RoleType Type { get; private set; }
@@ -15,8 +13,9 @@ public class Role : BaseAuditableEntity
     public bool IsActive { get; private set; }
     public int Priority { get; private set; } // Higher number = higher priority
 
-    public IReadOnlyCollection<Permission> Permissions => _permissions.AsReadOnly();
-    public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
+    // EF Core navigation properties - these need to be settable for EF change tracking
+    public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 
     private Role() { } // For EF Core
 
@@ -26,12 +25,17 @@ public class Role : BaseAuditableEntity
             throw new ArgumentException("Role name cannot be null or empty");
 
         Name = name;
+        NormalizedName = name.ToUpper();
         DisplayName = displayName;
         Description = description;
         Type = type;
         IsSystemRole = isSystemRole;
         IsActive = true;
         Priority = priority;
+        
+        // Initialize navigation properties
+        RolePermissions = new List<RolePermission>();
+        UserRoles = new List<UserRole>();
     }
 
     public void UpdateDetails(string displayName, string description)
@@ -65,24 +69,37 @@ public class Role : BaseAuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddPermission(Permission permission)
+    public void AddPermission(Permission permission, DateTime? expiresAt = null, Guid? grantedBy = null)
     {
-        if (_permissions.Any(p => p.Resource == permission.Resource && p.Action == permission.Action))
-            return; // Permission already exists
+        var existingRolePermission = RolePermissions
+            .FirstOrDefault(rp => rp.PermissionId == permission.Id);
 
-        _permissions.Add(permission);
+        if (existingRolePermission != null)
+        {
+            if (!existingRolePermission.IsActive)
+            {
+                // Need to create a new RolePermission since the old one is revoked
+                var newRolePermission = new RolePermission(Id, permission.Id, grantedBy, expiresAt);
+                RolePermissions.Add(newRolePermission);
+                UpdatedAt = DateTime.UtcNow;
+            }
+            return;
+        }
+
+        var rolePermission = new RolePermission(Id, permission.Id, grantedBy, expiresAt);
+        RolePermissions.Add(rolePermission);
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void RemovePermission(string resource, string action)
+    public void RemovePermission(Guid permissionId)
     {
         if (IsSystemRole)
             throw new InvalidOperationException("System role permissions cannot be modified");
 
-        var permission = _permissions.FirstOrDefault(p => p.Resource == resource && p.Action == action);
-        if (permission != null)
+        var rolePermission = RolePermissions.FirstOrDefault(rp => rp.PermissionId == permissionId);
+        if (rolePermission != null)
         {
-            _permissions.Remove(permission);
+            rolePermission.Revoke();
             UpdatedAt = DateTime.UtcNow;
         }
     }
@@ -92,50 +109,49 @@ public class Role : BaseAuditableEntity
         if (IsSystemRole)
             throw new InvalidOperationException("System role permissions cannot be modified");
 
-        _permissions.Clear();
+        foreach (var rolePermission in RolePermissions)
+        {
+            rolePermission.Revoke();
+        }
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public bool HasPermission(string resource, string action)
+    public bool HasPermission(string resource, string action, string? service = null)
     {
-        return _permissions.Any(p => p.Resource == resource && p.Action == action && p.IsActive);
+        return RolePermissions.Any(rp => 
+            rp.IsActive && 
+            !rp.IsExpired && 
+            rp.Permission.Resource == resource && 
+            rp.Permission.Action == action &&
+            (service == null || rp.Permission.Service == service) &&
+            rp.Permission.IsActive);
     }
 
-    public bool HasAnyPermission(string resource)
+    public bool HasAnyPermission(string resource, string? service = null)
     {
-        return _permissions.Any(p => p.Resource == resource && p.IsActive);
-    }
-}
-
-public class Permission : BaseEntity
-{
-    public Guid RoleId { get; private set; }
-    public string Resource { get; private set; } = string.Empty;
-    public string Action { get; private set; } = string.Empty;
-    public string? Scope { get; private set; }
-    public bool IsActive { get; private set; }
-
-    private Permission() { } // For EF Core
-
-    public Permission(Guid roleId, string resource, string action, string? scope = null)
-    {
-        RoleId = roleId;
-        Resource = resource;
-        Action = action;
-        Scope = scope;
-        IsActive = true;
+        return RolePermissions.Any(rp => 
+            rp.IsActive && 
+            !rp.IsExpired && 
+            rp.Permission.Resource == resource &&
+            (service == null || rp.Permission.Service == service) &&
+            rp.Permission.IsActive);
     }
 
-    public void Activate()
+    public IReadOnlyList<Permission> GetActivePermissions()
     {
-        IsActive = true;
-        UpdatedAt = DateTime.UtcNow;
+        return RolePermissions
+            .Where(rp => rp.IsActive && !rp.IsExpired)
+            .Select(rp => rp.Permission)
+            .ToList();
     }
 
-    public void Deactivate()
+    public IReadOnlyList<Permission> GetPermissions(string? service = null)
     {
-        IsActive = false;
-        UpdatedAt = DateTime.UtcNow;
+        return RolePermissions
+            .Where(rp => rp.IsActive && !rp.IsExpired && 
+                         (service == null || rp.Permission.Service == service))
+            .Select(rp => rp.Permission)
+            .ToList();
     }
 }
 

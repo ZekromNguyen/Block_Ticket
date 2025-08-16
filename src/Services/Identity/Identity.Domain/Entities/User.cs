@@ -9,6 +9,7 @@ public class User : BaseAuditableEntity
     private readonly List<UserSession> _sessions = new();
     private readonly List<MfaDevice> _mfaDevices = new();
     private readonly List<UserRole> _userRoles = new();
+    private readonly List<PasswordHistory> _passwordHistory = new();
 
     public Email Email { get; private set; } = null!;
     public string FirstName { get; private set; } = string.Empty;
@@ -28,6 +29,7 @@ public class User : BaseAuditableEntity
     public IReadOnlyCollection<UserSession> Sessions => _sessions.AsReadOnly();
     public IReadOnlyCollection<MfaDevice> MfaDevices => _mfaDevices.AsReadOnly();
     public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
+    public IReadOnlyCollection<PasswordHistory> PasswordHistory => _passwordHistory.AsReadOnly();
 
     private User() { } // For EF Core
 
@@ -75,6 +77,75 @@ public class User : BaseAuditableEntity
         UpdatedAt = DateTime.UtcNow;
 
         AddDomainEvent(new UserPasswordChangedDomainEvent(Id));
+    }
+
+    /// <summary>
+    /// Changes password with history tracking support
+    /// </summary>
+    /// <param name="newPasswordHash">The new password hash</param>
+    /// <param name="storeCurrentPasswordInHistory">Whether to store current password in history</param>
+    public void ChangePasswordWithHistory(string newPasswordHash, bool storeCurrentPasswordInHistory = true)
+    {
+        // Store current password in history before changing it
+        if (storeCurrentPasswordInHistory && !string.IsNullOrEmpty(PasswordHash))
+        {
+            var historyEntry = new PasswordHistory(Id, PasswordHash);
+            _passwordHistory.Add(historyEntry);
+        }
+
+        // Change to new password
+        PasswordHash = newPasswordHash;
+        UpdatedAt = DateTime.UtcNow;
+
+        AddDomainEvent(new UserPasswordChangedDomainEvent(Id));
+    }
+
+    /// <summary>
+    /// Checks if a password hash exists in the user's password history
+    /// </summary>
+    /// <param name="passwordHash">The password hash to check</param>
+    /// <param name="historyCount">Number of recent passwords to check (0 means check all)</param>
+    /// <returns>True if password exists in history, false otherwise</returns>
+    public bool IsPasswordInHistory(string passwordHash, int historyCount = 0)
+    {
+        if (string.IsNullOrEmpty(passwordHash))
+            return false;
+
+        var historyToCheck = historyCount > 0 
+            ? _passwordHistory.OrderByDescending(h => h.CreatedAt).Take(historyCount)
+            : _passwordHistory;
+
+        return historyToCheck.Any(h => h.PasswordHash == passwordHash);
+    }
+
+    /// <summary>
+    /// Cleans up old password history entries based on retention policy
+    /// </summary>
+    /// <param name="retentionDays">Number of days to retain password history</param>
+    /// <param name="maxHistoryCount">Maximum number of entries to keep regardless of age</param>
+    public void CleanupPasswordHistory(int retentionDays, int maxHistoryCount)
+    {
+        if (!_passwordHistory.Any()) return;
+
+        var cutoffDate = DateTime.UtcNow.AddDays(-retentionDays);
+        var orderedHistory = _passwordHistory.OrderByDescending(h => h.CreatedAt).ToList();
+
+        // Keep the most recent entries up to maxHistoryCount
+        var entriesToKeep = orderedHistory.Take(maxHistoryCount).ToList();
+
+        // Also keep any entries within retention period that aren't already kept
+        var entriesWithinRetention = orderedHistory
+            .Skip(maxHistoryCount)
+            .Where(h => h.CreatedAt > cutoffDate)
+            .ToList();
+
+        var finalEntriesToKeep = entriesToKeep.Union(entriesWithinRetention).ToList();
+        var entriesToRemove = _passwordHistory.Except(finalEntriesToKeep).ToList();
+
+        foreach (var entry in entriesToRemove)
+        {
+            _passwordHistory.Remove(entry);
+        }
     }
 
     public void RecordSuccessfulLogin()
@@ -174,6 +245,8 @@ public class User : BaseAuditableEntity
         var session = new UserSession(Id, deviceInfo, ipAddress);
         _sessions.Add(session);
         UpdatedAt = DateTime.UtcNow;
+
+        AddDomainEvent(new UserSessionCreatedDomainEvent(Id, session.Id, deviceInfo, ipAddress));
 
         return session;
     }
