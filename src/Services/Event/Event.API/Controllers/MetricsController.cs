@@ -1,5 +1,5 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
@@ -353,25 +353,28 @@ public class MetricsController : ControllerBase
             var endTime = DateTime.UtcNow;
             var startTime = endTime.AddHours(-timeRangeHours);
 
-            var dashboardTasks = new[]
-            {
-                _performanceMonitoringService.GetPerformanceSummaryAsync(serviceName, null, startTime, endTime, cancellationToken),
-                _performanceMonitoringService.GetRealTimeMetricsAsync(serviceName, cancellationToken),
-                _performanceMonitoringService.GetErrorMetricsAsync(serviceName, startTime, endTime, cancellationToken),
-                _slaMonitoringService.GetSlaViolationsAsync(startTime, endTime, serviceName, false, cancellationToken)
-            };
+            // Execute tasks concurrently with explicit typing
+            var performanceSummaryTask = _performanceMonitoringService.GetPerformanceSummaryAsync(serviceName, null, startTime, endTime, cancellationToken);
+            var realTimeMetricsTask = _performanceMonitoringService.GetRealTimeMetricsAsync(serviceName, cancellationToken);
+            var errorMetricsTask = _performanceMonitoringService.GetErrorMetricsAsync(serviceName, startTime, endTime, cancellationToken);
+            var slaViolationsTask = _slaMonitoringService.GetSlaViolationsAsync(startTime, endTime, serviceName, false, cancellationToken);
 
-            var results = await Task.WhenAll(dashboardTasks);
+            await Task.WhenAll(performanceSummaryTask, realTimeMetricsTask, errorMetricsTask, slaViolationsTask);
+            
+            var performanceSummary = await performanceSummaryTask;
+            var realTimeMetrics = await realTimeMetricsTask;
+            var errorMetrics = await errorMetricsTask;
+            var activeViolations = await slaViolationsTask;
 
             var dashboard = new MetricsDashboardData
             {
                 ServiceName = serviceName,
                 TimeRangeStart = startTime,
                 TimeRangeEnd = endTime,
-                PerformanceSummary = (PerformanceSummary)results[0],
-                RealTimeMetrics = (RealTimeMetrics)results[1],
-                ErrorMetrics = (Dictionary<string, int>)results[2],
-                ActiveViolations = ((IEnumerable<SlaViolation>)results[3]).ToList(),
+                PerformanceSummary = performanceSummary,
+                RealTimeMetrics = realTimeMetrics,
+                ErrorMetrics = errorMetrics,
+                ActiveViolations = activeViolations.ToList(),
                 LastUpdated = DateTime.UtcNow
             };
 

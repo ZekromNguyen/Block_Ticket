@@ -3,12 +3,22 @@ using Event.Domain.Enums;
 namespace Event.Application.Common.Models;
 
 /// <summary>
+/// Date time range DTO
+/// </summary>
+public record DateTimeRangeDto
+{
+    public DateTime Start { get; init; }
+    public DateTime End { get; init; }
+}
+
+/// <summary>
 /// Event data transfer object
 /// </summary>
 public record EventDto
 {
     public Guid Id { get; init; }
     public string Title { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty; // Alias for Title
     public string Description { get; init; } = string.Empty;
     public string Slug { get; init; } = string.Empty;
     public Guid OrganizationId { get; init; }
@@ -16,6 +26,8 @@ public record EventDto
     public Guid VenueId { get; init; }
     public string Status { get; init; } = string.Empty;
     public DateTime EventDate { get; init; }
+    public DateTime StartDateTime { get; init; } // Start time of the event
+    public DateTime EndDateTime { get; init; } // End time of the event
     public string TimeZone { get; init; } = string.Empty;
     public DateTime? PublishStartDate { get; init; }
     public DateTime? PublishEndDate { get; init; }
@@ -28,6 +40,14 @@ public record EventDto
     public int Version { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
+
+    // Status tracking properties
+    public int TotalCapacity { get; init; }
+    public int AvailableCapacity { get; init; }
+    public DateTime? PublishedAt { get; init; }
+    public DateTime? CancelledAt { get; init; }
+    public string? CancellationReason { get; init; }
+    public DateTimeRangeDto? PublishWindow { get; init; }
     
     // Navigation properties
     public List<TicketTypeDto> TicketTypes { get; set; } = new();
@@ -47,6 +67,8 @@ public record EventCatalogDto
     public DateTime EventDate { get; init; }
     public string TimeZone { get; init; } = string.Empty;
     public string? ImageUrl { get; init; }
+    public string? BannerUrl { get; init; }
+    public string Status { get; init; } = string.Empty;
     public List<string> Categories { get; init; } = new();
     public List<string> Tags { get; init; } = new();
     
@@ -62,6 +84,14 @@ public record EventCatalogDto
     public bool HasAvailability { get; init; }
     public int TotalCapacity { get; init; }
     public int AvailableCapacity { get; init; }
+    public int AvailableTickets { get; init; }
+
+    // Ticket types
+    public List<TicketTypeSummaryDto> TicketTypes { get; init; } = new();
+
+    // Timestamps
+    public DateTime CreatedAt { get; init; }
+    public DateTime UpdatedAt { get; init; }
 }
 
 /// <summary>
@@ -90,84 +120,9 @@ public record EventDetailDto
     public EventAvailabilityDto Availability { get; init; } = null!;
 }
 
-/// <summary>
-/// Create event request
-/// </summary>
-public record CreateEventRequest
-{
-    public string Title { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
-    public string Slug { get; init; } = string.Empty;
-    public Guid OrganizationId { get; init; }
-    public Guid PromoterId { get; init; }
-    public Guid VenueId { get; init; }
-    public DateTime EventDate { get; init; }
-    public string TimeZone { get; init; } = string.Empty;
-    public DateTime? PublishStartDate { get; init; }
-    public DateTime? PublishEndDate { get; init; }
-    public string? ImageUrl { get; init; }
-    public string? BannerUrl { get; init; }
-    public string? SeoTitle { get; init; }
-    public string? SeoDescription { get; init; }
-    public List<string> Categories { get; init; } = new();
-    public List<string> Tags { get; init; } = new();
-}
+// CreateEventRequest and UpdateEventRequest are defined in EventRequestDtos.cs
 
-/// <summary>
-/// Update event request
-/// </summary>
-public record UpdateEventRequest
-{
-    public string? Title { get; init; }
-    public string? Description { get; init; }
-    public DateTime? EventDate { get; init; }
-    public string? TimeZone { get; init; }
-    public DateTime? PublishStartDate { get; init; }
-    public DateTime? PublishEndDate { get; init; }
-    public string? ImageUrl { get; init; }
-    public string? BannerUrl { get; init; }
-    public string? SeoTitle { get; init; }
-    public string? SeoDescription { get; init; }
-    public List<string>? Categories { get; init; }
-    public List<string>? Tags { get; init; }
-}
-
-/// <summary>
-/// Get events request
-/// </summary>
-public record GetEventsRequest
-{
-    public Guid? PromoterId { get; init; }
-    public Guid? VenueId { get; init; }
-    public EventStatus? Status { get; init; }
-    public DateTime? StartDate { get; init; }
-    public DateTime? EndDate { get; init; }
-    public List<string>? Categories { get; init; }
-    public int PageNumber { get; init; } = 1;
-    public int PageSize { get; init; } = 20;
-    public string? SortBy { get; init; }
-    public bool SortDescending { get; init; }
-}
-
-/// <summary>
-/// Search events request
-/// </summary>
-public record SearchEventsRequest
-{
-    public string? SearchTerm { get; init; }
-    public DateTime? StartDate { get; init; }
-    public DateTime? EndDate { get; init; }
-    public Guid? VenueId { get; init; }
-    public string? City { get; init; }
-    public List<string>? Categories { get; init; }
-    public decimal? MinPrice { get; init; }
-    public decimal? MaxPrice { get; init; }
-    public bool? HasAvailability { get; init; }
-    public int PageNumber { get; init; } = 1;
-    public int PageSize { get; init; } = 20;
-    public string? SortBy { get; init; } = "EventDate";
-    public bool SortDescending { get; init; }
-}
+// GetEventsRequest and SearchEventsRequest are defined in EventRequestDtos.cs
 
 /// <summary>
 /// Get public events request
@@ -281,16 +236,4 @@ public record GetEventSeriesRequest
     public int PageSize { get; init; } = 20;
 }
 
-/// <summary>
-/// Paged result wrapper
-/// </summary>
-public record PagedResult<T>
-{
-    public IEnumerable<T> Items { get; init; } = Enumerable.Empty<T>();
-    public int TotalCount { get; init; }
-    public int PageNumber { get; init; }
-    public int PageSize { get; init; }
-    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
-    public bool HasPreviousPage => PageNumber > 1;
-    public bool HasNextPage => PageNumber < TotalPages;
-}
+// PagedResult<T> is defined in PagedResult.cs

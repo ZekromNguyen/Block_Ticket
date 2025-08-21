@@ -1,6 +1,8 @@
+using Event.API.Configuration;
 using Event.API.Middleware;
 using Event.Application.Configuration;
 using Event.Infrastructure.Configuration;
+using Event.Infrastructure.Middleware;
 using Event.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
@@ -14,11 +16,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Configure Serilog
 builder.Host.UseSerilog((context, configuration) =>
     configuration.ReadFrom.Configuration(context.Configuration));
-
-// Add additional configuration files
-builder.Configuration.AddJsonFile("appsettings.RateLimit.json", optional: true, reloadOnChange: true);
-builder.Configuration.AddJsonFile("appsettings.Cache.json", optional: true, reloadOnChange: true);
-builder.Configuration.AddJsonFile("appsettings.PerformanceMonitoring.json", optional: true, reloadOnChange: true);
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -104,12 +101,13 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
 // Add Health Checks
 builder.Services.AddHealthChecks();
 
-// Add Authentication & Authorization (placeholder for now)
-// builder.Services.AddAuthentication("Bearer")
-//     .AddJwtBearer("Bearer", options =>
-//     {
-//         // Configure JWT options
-//     });
+// Add Row-Level Security and Authentication
+builder.Configuration.ValidateRowLevelSecurityConfiguration();
+builder.Services.AddRowLevelSecurity(builder.Configuration);
+
+// Add Comprehensive Security Features
+builder.Configuration.ValidateSecurityConfiguration();
+builder.Services.AddComprehensiveSecurity(builder.Configuration);
 
 var app = builder.Build();
 
@@ -124,23 +122,17 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// Add comprehensive security middleware (order is important)
+app.UseComprehensiveSecurity(app.Environment);
+
+// Add Row-Level Security middleware
+app.UseRowLevelSecurity();
+
 // Add Serilog request logging
 app.UseSerilogRequestLogging();
 
 // Global exception handler
 app.UseGlobalExceptionHandler();
-
-// Performance monitoring middleware (first to capture all requests)
-app.UseMiddleware<PerformanceMonitoringMiddleware>();
-
-// Rate limiting middleware (before authentication)
-app.UseMiddleware<AdvancedRateLimitMiddleware>();
-
-// ETag middleware (before authentication and idempotency)
-app.UseMiddleware<ETagMiddleware>();
-
-// Idempotency middleware (before authentication)
-app.UseMiddleware<IdempotencyMiddleware>();
 
 // Security headers
 app.UseHsts();

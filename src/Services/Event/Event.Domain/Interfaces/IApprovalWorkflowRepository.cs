@@ -1,4 +1,5 @@
 using Event.Domain.Models;
+using Event.Domain.Common;
 
 namespace Event.Domain.Interfaces;
 

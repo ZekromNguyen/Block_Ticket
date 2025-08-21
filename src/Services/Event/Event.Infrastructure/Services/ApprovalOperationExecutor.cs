@@ -1,7 +1,10 @@
 using Event.Domain.Entities;
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Application.Interfaces.Services;
+using Event.Application.DTOs;
+using Event.Application.Common.Models;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -353,10 +356,10 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
                 };
             }
 
-            var options = new SeatMapImportOptions
+            var options = new Event.Application.Common.Models.SeatMapImportOptions
             {
-                ValidateSchema = true,
-                ReplaceExisting = importData.ReplaceExisting
+                ValidateBeforeImport = true,
+                OverwriteExisting = importData.ReplaceExisting
             };
 
             var result = await _seatMapService.ImportSeatMapFromSchemaAsync(
@@ -367,7 +370,7 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
                 Success = result.Success,
                 Message = result.Success ? "Seat map imported successfully" : "Seat map import failed",
                 Errors = result.Errors,
-                ResultData = { ["ImportedSeats"] = result.ImportedSeats, ["Checksum"] = result.Checksum }
+                ResultData = { ["ImportedSeats"] = result.ImportedSeats, ["Version"] = result.Version }
             };
         }
         catch (Exception ex)
@@ -387,7 +390,7 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
     {
         try
         {
-            var bulkData = JsonSerializer.Deserialize<BulkSeatOperationRequest>(JsonSerializer.Serialize(operationData));
+            var bulkData = JsonSerializer.Deserialize<Event.Application.Common.Models.BulkSeatOperationRequest>(JsonSerializer.Serialize(operationData));
             if (bulkData == null)
             {
                 return new OperationExecutionResult
@@ -403,7 +406,7 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
             {
                 Success = result.Successful > 0,
                 Message = $"Bulk operation completed. Success: {result.Successful}, Failed: {result.Failed}",
-                Errors = result.Errors,
+                Errors = result.Results.Where(r => !r.Success).Select(r => r.ErrorMessage ?? "Unknown error").ToList(),
                 ResultData = { ["Successful"] = result.Successful, ["Failed"] = result.Failed }
             };
         }
@@ -669,7 +672,7 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
 
     private class SeatMapImportData
     {
-        public SeatMapSchema? SeatMapSchema { get; set; }
+        public Event.Domain.Models.SeatMapSchema? SeatMapSchema { get; set; }
         public bool ReplaceExisting { get; set; } = true;
     }
 

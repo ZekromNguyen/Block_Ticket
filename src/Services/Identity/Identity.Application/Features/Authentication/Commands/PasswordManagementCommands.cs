@@ -101,7 +101,6 @@ public class ResetPasswordCommandHandler : ICommandHandler<ResetPasswordCommand,
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly ITokenService _tokenService;
     private readonly IPasswordService _passwordService;
-    private readonly IPasswordHistoryService _passwordHistoryService;
     private readonly ILogger<ResetPasswordCommandHandler> _logger;
 
     public ResetPasswordCommandHandler(
@@ -110,7 +109,6 @@ public class ResetPasswordCommandHandler : ICommandHandler<ResetPasswordCommand,
         IAuditLogRepository auditLogRepository,
         ITokenService tokenService,
         IPasswordService passwordService,
-        IPasswordHistoryService passwordHistoryService,
         ILogger<ResetPasswordCommandHandler> logger)
     {
         _userRepository = userRepository;
@@ -118,7 +116,6 @@ public class ResetPasswordCommandHandler : ICommandHandler<ResetPasswordCommand,
         _auditLogRepository = auditLogRepository;
         _tokenService = tokenService;
         _passwordService = passwordService;
-        _passwordHistoryService = passwordHistoryService;
         _logger = logger;
     }
 
@@ -159,39 +156,8 @@ public class ResetPasswordCommandHandler : ICommandHandler<ResetPasswordCommand,
             // Hash new password
             var newPasswordHash = _passwordService.HashPassword(request.NewPassword);
 
-            // Validate password history (check if password was used before)
-            var isPasswordValid = await _passwordHistoryService.IsPasswordValidAsync(
-                user.Id, 
-                newPasswordHash, 
-                cancellationToken);
-
-            if (!isPasswordValid)
-            {
-                var historyFailedAuditLog = Domain.Entities.AuditLog.CreateAdminAction(
-                    user.Id,
-                    "PASSWORD_RESET_FAILED",
-                    "USER_SECURITY",
-                    request.IpAddress ?? "Unknown",
-                    request.UserAgent ?? "Unknown",
-                    errorMessage: "Password reuse attempted during reset");
-
-                await _auditLogRepository.AddAsync(historyFailedAuditLog, cancellationToken);
-                return Result.Failure("Password cannot be reused. Please choose a password that hasn't been used recently.");
-            }
-
-            // Change password with history tracking
-            try
-            {
-                await _passwordHistoryService.ChangePasswordWithHistoryAsync(
-                    user.Id, 
-                    newPasswordHash, 
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to reset password with history for user {UserId}", user.Id);
-                return Result.Failure("An error occurred while resetting your password");
-            }
+            // Reset password
+            user.ChangePassword(newPasswordHash);
 
             // End all sessions for security
             user.EndAllSessions();
@@ -232,20 +198,17 @@ public class ConfirmEmailCommandHandler : ICommandHandler<ConfirmEmailCommand, R
     private readonly IUserRepository _userRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly ITokenService _tokenService;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ConfirmEmailCommandHandler> _logger;
 
     public ConfirmEmailCommandHandler(
         IUserRepository userRepository,
         IAuditLogRepository auditLogRepository,
         ITokenService tokenService,
-        IUnitOfWork unitOfWork,
         ILogger<ConfirmEmailCommandHandler> logger)
     {
         _userRepository = userRepository;
         _auditLogRepository = auditLogRepository;
         _tokenService = tokenService;
-        _unitOfWork = unitOfWork;
         _logger = logger;
     }
 
@@ -296,9 +259,6 @@ public class ConfirmEmailCommandHandler : ICommandHandler<ConfirmEmailCommand, R
 
             await _auditLogRepository.AddAsync(successAuditLog, cancellationToken);
 
-            // Save all changes to database
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-
             _logger.LogInformation("Email confirmed for user {UserId}", user.Id);
 
             return Result.Success();
@@ -324,7 +284,6 @@ public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordComman
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly IUserSessionRepository _sessionRepository;
     private readonly IPasswordService _passwordService;
-    private readonly IPasswordHistoryService _passwordHistoryService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ChangePasswordCommandHandler> _logger;
 
@@ -333,7 +292,6 @@ public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordComman
         IAuditLogRepository auditLogRepository,
         IUserSessionRepository sessionRepository,
         IPasswordService passwordService,
-        IPasswordHistoryService passwordHistoryService,
         IUnitOfWork unitOfWork,
         ILogger<ChangePasswordCommandHandler> logger)
     {
@@ -341,7 +299,6 @@ public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordComman
         _auditLogRepository = auditLogRepository;
         _sessionRepository = sessionRepository;
         _passwordService = passwordService;
-        _passwordHistoryService = passwordHistoryService;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -394,44 +351,8 @@ public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordComman
             // Hash new password
             var newPasswordHash = _passwordService.HashPassword(request.NewPassword);
 
-            // Validate password history (check if password was used before)
-            var isPasswordValid = await _passwordHistoryService.IsPasswordValidAsync(
-                user.Id, 
-                newPasswordHash, 
-                cancellationToken);
-
-            if (!isPasswordValid)
-            {
-                _logger.LogWarning("Password change failed: Password in history for user {UserId}", request.UserId);
-
-                // Create failed audit log for password reuse
-                var historyFailedAuditLog = Domain.Entities.AuditLog.CreateAdminAction(
-                    user.Id,
-                    "PASSWORD_CHANGE_FAILED",
-                    "USER_SECURITY",
-                    request.IpAddress ?? "Unknown",
-                    request.UserAgent ?? "Unknown",
-                    errorMessage: "Password reuse attempted");
-
-                await _auditLogRepository.AddAsync(historyFailedAuditLog, cancellationToken);
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-                return Result.Failure("Password cannot be reused. Please choose a password that hasn't been used recently.");
-            }
-
-            // Change password with history tracking
-            try
-            {
-                await _passwordHistoryService.ChangePasswordWithHistoryAsync(
-                    user.Id, 
-                    newPasswordHash, 
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to change password with history for user {UserId}", request.UserId);
-                return Result.Failure("An error occurred while changing your password");
-            }
+            // Change password
+            user.ChangePassword(newPasswordHash);
 
             // End all other sessions for security (except current session)
             await _sessionRepository.EndAllUserSessionsAsync(user.Id, cancellationToken);

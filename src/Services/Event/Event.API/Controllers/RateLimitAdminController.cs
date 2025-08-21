@@ -1,6 +1,6 @@
 using Event.API.Attributes;
 using Event.Domain.Configuration;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 

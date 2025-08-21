@@ -1,4 +1,4 @@
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.Primitives;
 using System.Text;
 

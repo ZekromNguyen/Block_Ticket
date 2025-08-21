@@ -1,6 +1,7 @@
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
 using Event.Infrastructure.Persistence;
+using Event.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Event.Infrastructure.Persistence.Repositories;
@@ -54,37 +55,39 @@ public class ApprovalWorkflowRepository : IApprovalWorkflowRepository
         }
     }
 
-    public async Task<PagedResult<ApprovalWorkflow>> GetPagedAsync(
+        public async Task<PagedResult<ApprovalWorkflow>> GetPagedAsync(
         Guid organizationId,
         ApprovalWorkflowFilter filter,
         int pageNumber,
         int pageSize,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.ApprovalWorkflows
-            .Include(w => w.ApprovalSteps)
-            .Where(w => w.OrganizationId == organizationId);
+        var query = _context.ApprovalWorkflows.AsQueryable();
 
-        // Apply filters
-        query = ApplyFilters(query, filter);
+        // Add organization filter
+        query = query.Where(w => w.OrganizationId == organizationId);
 
-        // Get total count
+        // Apply filters if provided
+        if (filter != null)
+        {
+            query = ApplyFilters(query, filter);
+        }
+
+        // Get total count before paging
         var totalCount = await query.CountAsync(cancellationToken);
 
-        // Apply paging and ordering
+        // Apply paging
         var items = await query
             .OrderByDescending(w => w.CreatedAt)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<ApprovalWorkflow>
-        {
-            Items = items,
-            TotalCount = totalCount,
-            PageNumber = pageNumber,
-            PageSize = pageSize
-        };
+        return new PagedResult<ApprovalWorkflow>(
+            items,
+            totalCount,
+            pageNumber,
+            pageSize);
     }
 
     public async Task<List<ApprovalWorkflow>> GetPendingForUserAsync(
@@ -181,18 +184,20 @@ public class ApprovalWorkflowRepository : IApprovalWorkflowRepository
         var statistics = new ApprovalWorkflowStatistics
         {
             TotalWorkflows = workflows.Count,
-            PendingApprovals = workflows.Count(w => w.Status == ApprovalStatus.Pending),
+            PendingApprovals = workflows.Count(w => w.Status == ApprovalStatus.Pending), // Use PendingApprovals instead of PendingWorkflows
             ApprovedWorkflows = workflows.Count(w => w.Status == ApprovalStatus.Approved),
             RejectedWorkflows = workflows.Count(w => w.Status == ApprovalStatus.Rejected),
             ExpiredWorkflows = workflows.Count(w => w.Status == ApprovalStatus.Expired),
             
+            // Convert to Dictionary<ApprovalOperationType, int> as expected by Domain.Models.ApprovalWorkflowStatistics
             WorkflowsByType = workflows
                 .GroupBy(w => w.OperationType)
                 .ToDictionary(g => g.Key, g => g.Count()),
                 
-            WorkflowsByRiskLevel = workflows
-                .GroupBy(w => w.RiskLevel)
-                .ToDictionary(g => g.Key, g => g.Count())
+            // The Domain.Models version doesn't have WorkflowsByRiskLevel, so remove it
+            // WorkflowsByRiskLevel = workflows
+            //     .GroupBy(w => w.RiskLevel)
+            //     .ToDictionary(g => g.Key, g => g.Count())
         };
 
         // Calculate average approval time for completed workflows
@@ -305,7 +310,7 @@ public class ApprovalWorkflowRepository : IApprovalWorkflowRepository
                                     w.RequesterName.Contains(filter.SearchTerm));
         }
 
-        if (filter.Tags.Any())
+        if (filter.Tags != null && filter.Tags.Any())
         {
             // This would require JSON querying capabilities for PostgreSQL
             // For now, we'll skip tag filtering in the database query

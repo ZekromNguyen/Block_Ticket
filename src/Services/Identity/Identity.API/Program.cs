@@ -3,9 +3,9 @@ using Identity.API.Middleware;
 using Identity.Application;
 using Identity.Infrastructure;
 using Identity.Infrastructure.Configuration;
+using Identity.Infrastructure.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Versioning;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Reflection;
 using System.Threading.RateLimiting;
@@ -233,39 +233,16 @@ app.MapHealthChecks("/health/live");
 
 app.MapControllers();
 
-// Apply database migrations and seed OpenIddict data
+// Seed OpenIddict data
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<Identity.Infrastructure.Persistence.IdentityDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    
-    // Apply any pending migrations
-    await context.Database.MigrateAsync();
-    
-    // Seed roles and permissions
-    try
-    {
-        await RolePermissionSeeder.SeedRolesAndPermissionsAsync(scope.ServiceProvider);
-        logger.LogInformation("Role and permission seeding completed successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "An error occurred while seeding roles and permissions");
-        // Don't throw here to allow the application to start even if seeding fails
-    }
-    
-    // Seed OpenIddict data after ensuring the database is up to date
-    try
-    {
-        logger.LogInformation("Starting OpenIddict seeding...");
-        await OpenIddictConfiguration.SeedOpenIddictDataAsync(scope.ServiceProvider);
-        logger.LogInformation("OpenIddict seeding completed successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Failed to seed OpenIddict data, but continuing startup");
-        // Don't throw here to allow the application to start even if OpenIddict seeding fails
-    }
+    await OpenIddictConfiguration.SeedOpenIddictDataAsync(scope.ServiceProvider);
+}
+
+// Seed application data (permissions, roles, users, etc.)
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+{
+    await app.SeedDatabaseAsync();
 }
 
 try

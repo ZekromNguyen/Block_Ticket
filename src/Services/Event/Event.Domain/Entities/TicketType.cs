@@ -1,4 +1,3 @@
-using Event.Domain.Common;
 using Event.Domain.Enums;
 using Event.Domain.Exceptions;
 using Event.Domain.ValueObjects;
@@ -9,7 +8,7 @@ namespace Event.Domain.Entities;
 /// <summary>
 /// Represents a type of ticket for an event
 /// </summary>
-public class TicketType : ETaggableEntity
+public class TicketType : BaseAuditableEntity
 {
     private readonly List<DateTimeRange> _onSaleWindows = new();
 
@@ -231,37 +230,5 @@ public class TicketType : ETaggableEntity
         return quantity >= MinPurchaseQuantity &&
                quantity <= MaxPurchaseQuantity &&
                (customerPreviousPurchases + quantity) <= MaxPerCustomer;
-    }
-
-    /// <summary>
-    /// Override to include ticket type-specific data in ETag calculation
-    /// Critical for inventory management
-    /// </summary>
-    protected override object? GetAdditionalETagData()
-    {
-        return new
-        {
-            Name,
-            Code,
-            BasePrice = BasePrice?.Amount,
-            Currency = BasePrice?.Currency,
-            InventoryType,
-            Capacity = Capacity?.Total,
-            Reserved = Capacity?.Reserved,
-            Available = Capacity?.Available,
-            MinPurchaseQuantity,
-            MaxPurchaseQuantity,
-            MaxPerCustomer,
-            IsVisible,
-            // Critical inventory state
-            InventoryState = new
-            {
-                Total = Capacity?.Total ?? 0,
-                Reserved = Capacity?.Reserved ?? 0,
-                Available = Capacity?.Available ?? 0,
-                IsAvailable = IsAvailable(),
-                IsOnSale = IsOnSaleNow()
-            }
-        };
     }
 }

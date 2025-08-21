@@ -1,9 +1,15 @@
+using Event.Application.Common.Interfaces;
 using Event.Domain.Entities;
 using Event.Domain.Models;
+using Event.Infrastructure.Middleware;
 using Event.Infrastructure.Persistence.Entities;
 using Event.Infrastructure.Persistence.Interceptors;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Npgsql;
 using Shared.Common.Models;
+using System.Data;
 using System.Reflection;
 
 namespace Event.Infrastructure.Persistence;
@@ -14,11 +20,22 @@ namespace Event.Infrastructure.Persistence;
 public class EventDbContext : DbContext
 {
     private readonly AuditInterceptor _auditInterceptor;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
+    private readonly IPostgreSqlSessionManager? _sessionManager;
+    private readonly ILogger<EventDbContext>? _logger;
 
-    public EventDbContext(DbContextOptions<EventDbContext> options, AuditInterceptor auditInterceptor) 
+    public EventDbContext(
+        DbContextOptions<EventDbContext> options,
+        AuditInterceptor auditInterceptor,
+        IHttpContextAccessor? httpContextAccessor = null,
+        IPostgreSqlSessionManager? sessionManager = null,
+        ILogger<EventDbContext>? logger = null)
         : base(options)
     {
         _auditInterceptor = auditInterceptor;
+        _httpContextAccessor = httpContextAccessor;
+        _sessionManager = sessionManager;
+        _logger = logger;
     }
 
     // Domain Entities
@@ -34,13 +51,12 @@ public class EventDbContext : DbContext
     
     // Infrastructure Entities
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
-    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
-    
+
     // Approval Workflow Entities
     public DbSet<ApprovalWorkflow> ApprovalWorkflows { get; set; } = null!;
-    public DbSet<ApprovalStep> ApprovalSteps { get; set; } = null!;
     public DbSet<ApprovalWorkflowTemplate> ApprovalWorkflowTemplates { get; set; } = null!;
     public DbSet<ApprovalAuditLog> ApprovalAuditLogs { get; set; } = null!;
+    public DbSet<ApprovalStep> ApprovalSteps { get; set; } = null!;
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -73,6 +89,9 @@ public class EventDbContext : DbContext
         SetSoftDeleteFilter<PricingRule>(modelBuilder);
         SetSoftDeleteFilter<Allocation>(modelBuilder);
         SetSoftDeleteFilter<Reservation>(modelBuilder);
+
+        // Set up organization-based query filters for RLS
+        SetOrganizationQueryFilters(modelBuilder);
 
         // Configure indexes for performance
         ConfigureIndexes(modelBuilder);
@@ -173,5 +192,87 @@ public class EventDbContext : DbContext
         }
 
         return result;
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        await SetPostgreSqlSessionContextAsync();
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges()
+    {
+        SetPostgreSqlSessionContextAsync().GetAwaiter().GetResult();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        SetPostgreSqlSessionContextAsync().GetAwaiter().GetResult();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <summary>
+    /// Sets PostgreSQL session context for RLS enforcement
+    /// </summary>
+    private async Task SetPostgreSqlSessionContextAsync()
+    {
+        if (_httpContextAccessor?.HttpContext == null || _sessionManager == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var organizationId = _httpContextAccessor.HttpContext.Items["CurrentOrganizationId"] as Guid?;
+            var userId = _httpContextAccessor.HttpContext.Items["CurrentUserId"] as Guid?;
+            var correlationId = _httpContextAccessor.HttpContext.Items["CorrelationId"] as string;
+
+            if (organizationId.HasValue && Database.GetDbConnection() is NpgsqlConnection connection)
+            {
+                await _sessionManager.SetSessionVariablesAsync(connection, organizationId, userId, correlationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to set PostgreSQL session context for RLS");
+            // Don't throw - allow operation to continue
+        }
+    }
+
+    /// <summary>
+    /// Sets up organization-based query filters for entities that support multi-tenancy
+    /// </summary>
+    private void SetOrganizationQueryFilters(ModelBuilder modelBuilder)
+    {
+        // Note: These global query filters work in conjunction with RLS policies
+        // They provide application-level filtering while RLS provides database-level security
+
+        // Events are directly organization-scoped
+        modelBuilder.Entity<EventAggregate>().HasQueryFilter(e =>
+            GetCurrentOrganizationId() == Guid.Empty || e.OrganizationId == GetCurrentOrganizationId());
+
+        // Venues are directly organization-scoped
+        modelBuilder.Entity<Venue>().HasQueryFilter(v =>
+            GetCurrentOrganizationId() == Guid.Empty || v.OrganizationId == GetCurrentOrganizationId());
+
+        // Event Series are directly organization-scoped
+        modelBuilder.Entity<EventSeries>().HasQueryFilter(es =>
+            GetCurrentOrganizationId() == Guid.Empty || es.OrganizationId == GetCurrentOrganizationId());
+
+        // Other entities are filtered through their relationship to events
+        // These filters are automatically applied by EF Core when querying
+    }
+
+    /// <summary>
+    /// Gets the current organization ID from HTTP context
+    /// </summary>
+    private Guid GetCurrentOrganizationId()
+    {
+        if (_httpContextAccessor?.HttpContext?.Items["CurrentOrganizationId"] is Guid organizationId)
+        {
+            return organizationId;
+        }
+        return Guid.Empty; // Return empty GUID to disable filtering when no context
     }
 }

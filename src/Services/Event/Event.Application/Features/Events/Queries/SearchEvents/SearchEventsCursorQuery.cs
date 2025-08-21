@@ -3,13 +3,14 @@ using Event.Domain.Enums;
 using Event.Domain.Models;
 using MediatR;
 using System.ComponentModel.DataAnnotations;
+using DomainModels = Event.Domain.Models;
 
 namespace Event.Application.Features.Events.Queries.SearchEvents;
 
 /// <summary>
 /// Cursor-based search events query
 /// </summary>
-public record SearchEventsCursorQuery : IRequest<CursorPagedResult<EventCatalogDto>>
+public record SearchEventsCursorQuery : IRequest<DomainModels.CursorPagedResult<EventCatalogDto>>
 {
     /// <summary>
     /// Search term to match against event title, description, or categories
@@ -95,7 +96,7 @@ public record SearchEventsCursorQuery : IRequest<CursorPagedResult<EventCatalogD
             MaxPrice = request.MaxPrice,
             HasAvailability = request.HasAvailability,
             SortBy = request.SortBy ?? "EventDate",
-            SortDescending = request.SortDescending,
+            SortDescending = request.SortDescending ?? false,
             Pagination = new CursorPaginationParams
             {
                 First = request.PageSize,
@@ -138,7 +139,7 @@ public record SearchEventsCursorQuery : IRequest<CursorPagedResult<EventCatalogD
 /// <summary>
 /// Cursor-based get events query
 /// </summary>
-public record GetEventsCursorQuery : IRequest<CursorPagedResult<EventDto>>
+public record GetEventsCursorQuery : IRequest<DomainModels.CursorPagedResult<EventDto>>
 {
     /// <summary>
     /// Filter by promoter ID
@@ -195,11 +196,11 @@ public record GetEventsCursorQuery : IRequest<CursorPagedResult<EventDto>>
             PromoterId = request.PromoterId,
             VenueId = request.VenueId,
             OrganizationId = request.OrganizationId,
-            Status = request.Status,
+            Status = string.IsNullOrEmpty(request.Status) ? null : Enum.Parse<EventStatus>(request.Status, true),
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             SortBy = request.SortBy ?? "EventDate",
-            SortDescending = request.SortDescending,
+            SortDescending = request.SortDescending ?? false,
             Pagination = new CursorPaginationParams
             {
                 First = request.PageSize,

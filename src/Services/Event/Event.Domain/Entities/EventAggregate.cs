@@ -1,4 +1,3 @@
-using Event.Domain.Common;
 using Event.Domain.Enums;
 using Event.Domain.Events;
 using Event.Domain.Exceptions;
@@ -11,7 +10,7 @@ namespace Event.Domain.Entities;
 /// <summary>
 /// Event aggregate root - represents a ticketed event
 /// </summary>
-public class EventAggregate : ETaggableEntity
+public class EventAggregate : BaseAuditableEntity
 {
     private readonly List<TicketType> _ticketTypes = new();
     private readonly List<PricingRule> _pricingRules = new();
@@ -21,17 +20,25 @@ public class EventAggregate : ETaggableEntity
 
     // Basic Properties
     public string Title { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty; // Alias for Title for backward compatibility
     public string Description { get; private set; } = string.Empty;
     public Slug Slug { get; private set; } = null!;
     public Guid OrganizationId { get; private set; }
     public Guid PromoterId { get; private set; }
     public Guid VenueId { get; private set; }
     public EventStatus Status { get; private set; }
-    
+
     // Scheduling
     public DateTime EventDate { get; private set; }
+    public DateTime StartDateTime { get; private set; } // Start time of the event
+    public DateTime EndDateTime { get; private set; } // End time of the event
     public TimeZoneId TimeZone { get; private set; } = null!;
     public DateTimeRange? PublishWindow { get; private set; }
+
+    // Status Tracking
+    public DateTime? PublishedAt { get; private set; }
+    public DateTime? CancelledAt { get; private set; }
+    public string? CancellationReason { get; private set; }
     
     // Marketing
     public string? ImageUrl { get; private set; }
@@ -39,6 +46,9 @@ public class EventAggregate : ETaggableEntity
     public string? SeoTitle { get; private set; }
     public string? SeoDescription { get; private set; }
     
+    // Capacity
+    public int TotalCapacity => _ticketTypes.Sum(tt => tt.Capacity.Total);
+
     // Versioning
     public int Version { get; private set; }
     public string? ChangeHistory { get; private set; } // JSON
@@ -64,29 +74,92 @@ public class EventAggregate : ETaggableEntity
         Guid promoterId,
         Guid venueId,
         DateTime eventDate,
-        TimeZoneId timeZone)
+        TimeZoneId timeZone,
+        DateTime? startDateTime = null,
+        DateTime? endDateTime = null)
     {
         if (string.IsNullOrWhiteSpace(title))
             throw new EventDomainException("Event title cannot be empty");
-        
+
         if (string.IsNullOrWhiteSpace(description))
             throw new EventDomainException("Event description cannot be empty");
-        
+
         if (eventDate <= DateTime.UtcNow)
             throw new EventDomainException("Event date must be in the future");
 
         Title = title.Trim();
+        Name = title.Trim(); // Set Name as alias for Title
         Description = description.Trim();
         Slug = Slug.FromString(slug);
         OrganizationId = organizationId;
         PromoterId = promoterId;
         VenueId = venueId;
         EventDate = eventDate;
+        StartDateTime = startDateTime ?? eventDate;
+        EndDateTime = endDateTime ?? eventDate.AddHours(2); // Default 2-hour duration
         TimeZone = timeZone;
         Status = EventStatus.Draft;
         Version = 1;
 
         AddDomainEvent(new EventCreatedDomainEvent(Id, Title, PromoterId, EventDate, VenueId));
+    }
+
+    /// <summary>
+    /// Factory method to create a new event aggregate
+    /// </summary>
+    public static EventAggregate CreateNew(
+        Guid organizationId,
+        string title,
+        string description,
+        List<string> categories,
+        Guid promoterId,
+        Guid venueId,
+        DateTime eventDate,
+        TimeZoneId timeZone,
+        Guid createdBy)
+    {
+        var slug = Slug.FromString(title).Value;
+        var eventAggregate = new EventAggregate(
+            title,
+            description,
+            slug,
+            organizationId,
+            promoterId,
+            venueId,
+            eventDate,
+            timeZone);
+
+        // Add categories
+        foreach (var category in categories)
+        {
+            eventAggregate.AddCategory(category);
+        }
+
+        return eventAggregate;
+    }
+
+    /// <summary>
+    /// Overload for test scenarios with simpler parameters
+    /// </summary>
+    public static EventAggregate CreateNew(
+        string title,
+        string description,
+        Guid promoterId,
+        Guid venueId,
+        DateTime eventDate,
+        TimeZoneId timeZone)
+    {
+        var organizationId = Guid.NewGuid(); // Default for tests
+        var slug = Slug.FromString(title).Value;
+        return new EventAggregate(
+            title,
+            description,
+            slug,
+            organizationId,
+            promoterId,
+            venueId,
+            eventDate,
+            timeZone);
     }
 
     public void UpdateBasicInfo(string title, string description, DateTime eventDate)
@@ -280,6 +353,7 @@ public class EventAggregate : ETaggableEntity
             throw new EventDomainException("Cannot publish event without publish window");
 
         Status = EventStatus.Published;
+        PublishedAt = DateTime.UtcNow;
         Version++;
 
         AddDomainEvent(new EventPublishedDomainEvent(Id, Title, DateTime.UtcNow, EventDate));
@@ -295,6 +369,7 @@ public class EventAggregate : ETaggableEntity
             throw new EventDomainException("Cannot publish event without ticket types");
 
         Status = EventStatus.Published;
+        PublishedAt = publishedAt;
         Version++;
 
         AddDomainEvent(new EventPublishedDomainEvent(Id, Title, publishedAt, EventDate));
@@ -314,13 +389,7 @@ public class EventAggregate : ETaggableEntity
 
     public void Cancel(string reason)
     {
-        if (Status == EventStatus.Cancelled || Status == EventStatus.Completed)
-            throw new EventDomainException($"Cannot cancel event in {Status} status");
-
-        Status = EventStatus.Cancelled;
-        Version++;
-
-        AddDomainEvent(new EventCancelledDomainEvent(Id, Title, DateTime.UtcNow, reason));
+        Cancel(reason, DateTime.UtcNow);
     }
 
     // Overload for Application layer
@@ -330,6 +399,8 @@ public class EventAggregate : ETaggableEntity
             throw new EventDomainException($"Cannot cancel event in {Status} status");
 
         Status = EventStatus.Cancelled;
+        CancelledAt = cancelledAt;
+        CancellationReason = reason;
         Version++;
 
         AddDomainEvent(new EventCancelledDomainEvent(Id, Title, cancelledAt, reason));
@@ -417,16 +488,6 @@ public class EventAggregate : ETaggableEntity
         return _ticketTypes.Any(tt => tt.IsAvailable());
     }
 
-    public int GetAvailableCapacity()
-    {
-        return _ticketTypes.Sum(tt => tt.Capacity.Available);
-    }
-
-    public int GetTotalCapacity()
-    {
-        return _ticketTypes.Sum(tt => tt.Capacity.Total);
-    }
-
     public void CheckAndUpdateSoldOutStatus()
     {
         if (Status == EventStatus.OnSale && !HasAvailableTickets())
@@ -437,29 +498,27 @@ public class EventAggregate : ETaggableEntity
     }
 
     /// <summary>
-    /// Override to include event-specific data in ETag calculation
+    /// Check if the event allows resale of tickets
     /// </summary>
-    protected override object? GetAdditionalETagData()
+    public bool AllowsResale()
     {
-        return new
-        {
-            Title,
-            Status,
-            Version,
-            EventDate,
-            TotalCapacity = GetTotalCapacity(),
-            AvailableCapacity = GetAvailableCapacity(),
-            TicketTypeCount = _ticketTypes.Count,
-            PricingRuleCount = _pricingRules.Count,
-            AllocationCount = _allocations.Count,
-            // Include critical inventory data
-            InventorySnapshot = _ticketTypes.Select(tt => new
-            {
-                tt.Id,
-                Total = tt.Capacity.Total,
-                Reserved = tt.Capacity.Reserved,
-                Available = tt.Capacity.Available
-            }).ToList()
-        };
+        // Default business rule: allow resale if event is not cancelled and is more than 24 hours away
+        return Status != EventStatus.Cancelled &&
+               EventDate > DateTime.UtcNow.AddHours(24);
     }
+
+    /// <summary>
+    /// Check if the event allows refunds
+    /// </summary>
+    public bool AllowsRefunds()
+    {
+        // Default business rule: allow refunds if event is not cancelled and is more than the cutoff period away
+        return Status != EventStatus.Cancelled &&
+               EventDate > DateTime.UtcNow.AddDays(RefundCutoffDays);
+    }
+
+    /// <summary>
+    /// Number of days before event when refunds are no longer allowed
+    /// </summary>
+    public int RefundCutoffDays { get; private set; } = 7; // Default 7 days
 }

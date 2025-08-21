@@ -6,13 +6,14 @@ using Event.Domain.Models;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
+using DomainModels = Event.Domain.Models;
 
 namespace Event.Application.Features.Events.Queries.SearchEvents;
 
 /// <summary>
 /// Handler for cursor-based event search queries
 /// </summary>
-public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursorQuery, CursorPagedResult<EventCatalogDto>>
+public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursorQuery, DomainModels.CursorPagedResult<EventCatalogDto>>
 {
     private readonly IEventRepository _eventRepository;
     private readonly IVenueRepository _venueRepository;
@@ -31,7 +32,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
         _logger = logger;
     }
 
-    public async Task<CursorPagedResult<EventCatalogDto>> Handle(SearchEventsCursorQuery request, CancellationToken cancellationToken)
+    public async Task<DomainModels.CursorPagedResult<EventCatalogDto>> Handle(SearchEventsCursorQuery request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Cursor-based search for events with term: {SearchTerm}, Sort: {SortBy}", 
             request.SearchTerm, request.SortBy);
@@ -43,7 +44,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
             cacheKey = GenerateSearchCacheKey(request);
             
             // Try to get from cache first
-            var cachedResult = await _cacheService.GetAsync<CursorPagedResult<EventCatalogDto>>(cacheKey, cancellationToken);
+            var cachedResult = await _cacheService.GetAsync<DomainModels.CursorPagedResult<EventCatalogDto>>(cacheKey, cancellationToken);
             if (cachedResult != null)
             {
                 _logger.LogDebug("Cursor search results found in cache for key: {CacheKey}", cacheKey);
@@ -64,7 +65,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
         // Convert to catalog DTOs
         var catalogDtos = result.Items.Select(e => MapToCatalogDto(e, venues)).ToList();
 
-        var finalResult = new CursorPagedResult<EventCatalogDto>
+        var finalResult = new DomainModels.CursorPagedResult<EventCatalogDto>
         {
             Items = catalogDtos,
             NextCursor = result.NextCursor,
@@ -85,7 +86,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
         return finalResult;
     }
 
-    private async Task<CursorPagedResult<EventAggregate>> GetCursorPagedEvents(
+    private async Task<DomainModels.CursorPagedResult<EventAggregate>> GetCursorPagedEvents(
         SearchEventsCursorQuery request,
         Expression<Func<EventAggregate, bool>> predicate,
         CancellationToken cancellationToken)
@@ -104,7 +105,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
             "createdat" => await _eventRepository.GetCursorPagedAsync<DateTime, Guid>(
                 request.Pagination,
                 predicate,
-                e => e.Created ?? DateTime.MinValue,
+                e => e.CreatedAt,
                 e => e.Id,
                 request.SortDescending,
                 false,
@@ -119,10 +120,10 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
                 false,
                 cancellationToken),
 
-            "status" => await _eventRepository.GetCursorPagedAsync<EventStatus, Guid>(
+            "status" => await _eventRepository.GetCursorPagedAsync<int, Guid>(
                 request.Pagination,
                 predicate,
-                e => e.Status,
+                e => (int)e.Status,
                 e => e.Id,
                 request.SortDescending,
                 false,
@@ -260,8 +261,8 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
                 .Max(),
             AvailableTickets = eventEntity.TicketTypes.Sum(tt => tt.Capacity.Available),
             TotalCapacity = eventEntity.TotalCapacity,
-            CreatedAt = eventEntity.Created ?? DateTime.UtcNow,
-            UpdatedAt = eventEntity.LastModified ?? DateTime.UtcNow
+            CreatedAt = eventEntity.CreatedAt,
+            UpdatedAt = eventEntity.UpdatedAt ?? DateTime.UtcNow
         };
     }
 
@@ -293,7 +294,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
 /// <summary>
 /// Handler for cursor-based get events queries
 /// </summary>
-public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery, CursorPagedResult<EventDto>>
+public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery, DomainModels.CursorPagedResult<EventDto>>
 {
     private readonly IEventRepository _eventRepository;
     private readonly ICacheService _cacheService;
@@ -309,7 +310,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         _logger = logger;
     }
 
-    public async Task<CursorPagedResult<EventDto>> Handle(GetEventsCursorQuery request, CancellationToken cancellationToken)
+    public async Task<DomainModels.CursorPagedResult<EventDto>> Handle(GetEventsCursorQuery request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Cursor-based get events - Promoter: {PromoterId}, Venue: {VenueId}, Status: {Status}",
             request.PromoterId, request.VenueId, request.Status);
@@ -320,7 +321,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         {
             cacheKey = GenerateGetEventsCacheKey(request);
 
-            var cachedResult = await _cacheService.GetAsync<CursorPagedResult<EventDto>>(cacheKey, cancellationToken);
+            var cachedResult = await _cacheService.GetAsync<DomainModels.CursorPagedResult<EventDto>>(cacheKey, cancellationToken);
             if (cachedResult != null)
             {
                 _logger.LogDebug("Cursor events found in cache for key: {CacheKey}", cacheKey);
@@ -337,7 +338,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         // Convert to DTOs
         var eventDtos = result.Items.Select(MapToEventDto).ToList();
 
-        var finalResult = new CursorPagedResult<EventDto>
+        var finalResult = new DomainModels.CursorPagedResult<EventDto>
         {
             Items = eventDtos,
             NextCursor = result.NextCursor,
@@ -358,7 +359,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         return finalResult;
     }
 
-    private async Task<CursorPagedResult<EventAggregate>> GetCursorPagedEvents(
+    private async Task<DomainModels.CursorPagedResult<EventAggregate>> GetCursorPagedEvents(
         GetEventsCursorQuery request,
         Expression<Func<EventAggregate, bool>> predicate,
         CancellationToken cancellationToken)
@@ -377,7 +378,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
             "createdat" => await _eventRepository.GetCursorPagedAsync<DateTime, Guid>(
                 request.Pagination,
                 predicate,
-                e => e.Created ?? DateTime.MinValue,
+                e => e.CreatedAt,
                 e => e.Id,
                 request.SortDescending,
                 false,
@@ -392,10 +393,10 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
                 false,
                 cancellationToken),
 
-            "status" => await _eventRepository.GetCursorPagedAsync<EventStatus, Guid>(
+            "status" => await _eventRepository.GetCursorPagedAsync<int, Guid>(
                 request.Pagination,
                 predicate,
-                e => e.Status,
+                e => (int)e.Status,
                 e => e.Id,
                 request.SortDescending,
                 false,
@@ -475,12 +476,11 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
             AvailableCapacity = eventEntity.GetTotalAvailableCapacity(),
             PublishWindow = eventEntity.PublishWindow != null ? new DateTimeRangeDto
             {
-                StartDate = eventEntity.PublishWindow.StartDate,
-                EndDate = eventEntity.PublishWindow.EndDate,
-                TimeZone = eventEntity.PublishWindow.TimeZone?.Value ?? string.Empty
+                Start = eventEntity.PublishWindow.StartDate,
+                End = eventEntity.PublishWindow.EndDate
             } : null,
-            CreatedAt = eventEntity.Created ?? DateTime.UtcNow,
-            UpdatedAt = eventEntity.LastModified ?? DateTime.UtcNow
+            CreatedAt = eventEntity.CreatedAt,
+            UpdatedAt = eventEntity.UpdatedAt ?? DateTime.UtcNow
         };
     }
 

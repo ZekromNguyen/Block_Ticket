@@ -1,6 +1,7 @@
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
 using Event.Infrastructure.Persistence;
+using Event.Domain.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace Event.Infrastructure.Persistence.Repositories;

@@ -1,14 +1,11 @@
 using Event.Application.Common.Interfaces;
-using Event.Domain.Configuration;
 using Event.Domain.Interfaces;
-using Event.Domain.Services;
 using Event.Infrastructure.Persistence;
 using Event.Infrastructure.Persistence.Interceptors;
 using Event.Infrastructure.Persistence.Repositories;
 using Event.Infrastructure.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -42,20 +39,11 @@ public static class InfrastructureServiceRegistration
         // Add Infrastructure Services
         AddInfrastructureServices(services);
 
-        // Add Rate Limiting Configuration
-        AddRateLimiting(services, configuration);
-
-        // Add Advanced Caching Configuration
-        AddAdvancedCaching(services, configuration);
-
         // Add MassTransit (Message Bus)
         AddMassTransit(services, configuration, environment);
 
         // Add Background Services
         AddBackgroundServices(services);
-
-        // Add Performance Monitoring
-        AddPerformanceMonitoring(services, configuration);
 
         return services;
     }
@@ -132,39 +120,29 @@ public static class InfrastructureServiceRegistration
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<IVenueRepository, VenueRepository>();
         services.AddScoped<IReservationRepository, ReservationRepository>();
-        services.AddScoped<IPricingRuleRepository, PricingRuleRepository>();
+        services.AddScoped<IPricingRuleRepository, Persistence.Repositories.PricingRuleRepository>();
         services.AddScoped<IEventSeriesRepository, EventSeriesRepository>();
-        services.AddScoped<IIdempotencyRepository, IdempotencyRepository>();
-        services.AddScoped<ISeatRepository, SeatRepository>();
-        
-        // Approval workflow repositories
-        services.AddScoped<IApprovalWorkflowRepository, ApprovalWorkflowRepository>();
-        services.AddScoped<IApprovalWorkflowTemplateRepository, ApprovalWorkflowTemplateRepository>();
-        services.AddScoped<IApprovalAuditLogRepository, ApprovalAuditLogRepository>();
+
+        // Add Unit of Work
+        services.AddScoped<IUnitOfWork, Persistence.UnitOfWork>();
 
         // Register application services
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, Services.CurrentUserService>();
         services.AddScoped<IIntegrationEventPublisher, Services.IntegrationEventPublisher>();
         services.AddScoped<INotificationService, Services.NotificationService>();
+        services.AddScoped<Event.Application.Services.IPricingValidationService, Event.Application.Services.PricingValidationService>();
+
+        // Register organization context and RLS services
+        services.AddScoped<Event.Application.Common.Interfaces.IOrganizationContextProvider, Services.OrganizationContextProvider>();
+        services.AddScoped<Middleware.IPostgreSqlSessionManager, Middleware.PostgreSqlSessionManager>();
     }
 
     private static void AddDomainServices(IServiceCollection services)
     {
         services.AddScoped<ISeatLockService, SeatLockService>();
         services.AddScoped<IInventorySnapshotService, InventorySnapshotService>();
-        services.AddScoped<IPricingEngineService, PricingEngineService>();
-        services.AddScoped<IIdempotencyService, IdempotencyService>();
-        services.AddScoped<IRateLimitService, RateLimitService>();
-        services.AddScoped<IPerformanceMonitoringService, PerformanceMonitoringService>();
-        services.AddScoped<ISlaMonitoringService, SlaMonitoringService>();
-        services.AddScoped<ISeatMapImportExportService, SeatMapImportExportService>();
-        services.AddScoped<ISeatMapBulkOperationsService, SeatMapBulkOperationsService>();
-        
-        // Approval workflow services
-        services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
-        services.AddScoped<IApprovalOperationExecutor, ApprovalOperationExecutor>();
-        services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
+        services.AddScoped<IPricingEngineService, Services.PricingEngineService>();
     }
 
     private static void AddInfrastructureServices(IServiceCollection services)
@@ -172,7 +150,6 @@ public static class InfrastructureServiceRegistration
         // Add other infrastructure services as needed
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IFileStorageService, FileStorageService>();
-        services.AddScoped<SeatMapSchemaValidator>();
     }
 
     private static void AddMassTransit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
@@ -181,6 +158,17 @@ public static class InfrastructureServiceRegistration
         {
             // Add consumers
             x.AddConsumersFromNamespaceContaining<EventCreatedConsumer>();
+
+            // Add integration event consumers
+            x.AddConsumer<Messaging.Consumers.OrderPaymentAuthorizedConsumer>();
+            x.AddConsumer<Messaging.Consumers.OrderPaymentCompletedConsumer>();
+            x.AddConsumer<Messaging.Consumers.OrderPaymentFailedConsumer>();
+            x.AddConsumer<Messaging.Consumers.OrderCancelledConsumer>();
+            x.AddConsumer<Messaging.Consumers.RefundRequestedConsumer>();
+            x.AddConsumer<Messaging.Consumers.RefundProcessedConsumer>();
+            x.AddConsumer<Messaging.Consumers.TicketResaleListedConsumer>();
+            x.AddConsumer<Messaging.Consumers.TicketResaleSoldConsumer>();
+            x.AddConsumer<Messaging.Consumers.UserPreferencesUpdatedConsumer>();
 
             x.UsingRabbitMq((context, cfg) =>
             {
@@ -202,6 +190,10 @@ public static class InfrastructureServiceRegistration
                     maxInterval: TimeSpan.FromSeconds(30),
                     intervalDelta: TimeSpan.FromSeconds(1)));
 
+                // Configure message topology and error handling
+                Messaging.MessagingConfiguration.ConfigureMessageTopology(cfg);
+                Messaging.MessagingConfiguration.ConfigureErrorHandling(cfg);
+
                 // Configure endpoints
                 cfg.ConfigureEndpoints(context);
             });
@@ -221,55 +213,6 @@ public static class InfrastructureServiceRegistration
         services.AddHostedService<ReservationCleanupService>();
         services.AddHostedService<EventStatusUpdateService>();
         services.AddHostedService<CacheWarmupService>();
-        services.AddHostedService<IdempotencyCleanupService>();
-        services.AddHostedService<ApprovalWorkflowBackgroundService>();
-    }
-
-    private static void AddRateLimiting(IServiceCollection services, IConfiguration configuration)
-    {
-        // Configure rate limiting
-        services.Configure<RateLimitConfiguration>(
-            configuration.GetSection(RateLimitConfiguration.SectionName));
-    }
-
-    private static void AddAdvancedCaching(IServiceCollection services, IConfiguration configuration)
-    {
-        // Configure caching
-        services.Configure<CacheConfiguration>(
-            configuration.GetSection(CacheConfiguration.SectionName));
-
-        var cacheConfig = configuration.GetSection(CacheConfiguration.SectionName).Get<CacheConfiguration>() ?? new CacheConfiguration();
-        var redisConnectionString = cacheConfig.Redis.ConnectionString ?? configuration.GetConnectionString("Redis");
-
-        if (!string.IsNullOrEmpty(redisConnectionString))
-        {
-            // Redis is available - use advanced Redis cache service
-            services.AddSingleton<IAdvancedCacheService, AdvancedRedisCacheService>();
-            
-            Console.WriteLine($"Advanced Redis caching enabled with connection: {redisConnectionString.Substring(0, Math.Min(20, redisConnectionString.Length))}...");
-        }
-        else
-        {
-            // Fallback to enhanced in-memory cache when Redis is not available
-            services.AddSingleton<IAdvancedCacheService>(provider =>
-            {
-                var memoryCache = provider.GetRequiredService<IMemoryCache>();
-                var logger = provider.GetRequiredService<ILogger<InMemoryCacheService>>();
-                return new InMemoryCacheService(memoryCache, logger);
-            });
-            
-            Console.WriteLine("Redis not available - using in-memory cache fallback");
-        }
-
-        // Register cache services
-        services.AddScoped<ICacheWarmupService, CacheWarmupService>();
-        services.AddScoped<ICacheInvalidationService, CacheInvalidationService>();
-        
-        // Add cache warmup as background service if enabled
-        if (cacheConfig.Warmup.Enabled)
-        {
-            services.AddHostedService<CacheWarmupService>();
-        }
     }
 }
 
@@ -306,24 +249,7 @@ public class ReservationRepository : BaseRepository<Domain.Entities.Reservation>
     // UpdateAsync, DeleteAsync, ExistsAsync inherited from BaseRepository
 }
 
-// Additional placeholder services
-public class PricingRuleRepository : BaseRepository<Domain.Entities.PricingRule>, IPricingRuleRepository
-{
-    public PricingRuleRepository(EventDbContext context) : base(context) { }
-    
-    public Task<IEnumerable<Domain.Entities.PricingRule>> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<Domain.Entities.PricingRule?> GetByDiscountCodeAsync(Guid eventId, string discountCode, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<bool> DiscountCodeExistsAsync(Guid eventId, string discountCode, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<IEnumerable<Domain.Entities.PricingRule>> GetActiveRulesForEventAsync(Guid eventId, DateTime effectiveDate, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<IEnumerable<Domain.Entities.PricingRule>> GetByTicketTypeAsync(Guid ticketTypeId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<(IEnumerable<Domain.Entities.PricingRule> Rules, int TotalCount)> GetPagedByEventAsync(
-        Guid eventId,
-        int pageNumber,
-        int pageSize,
-        string? type = null,
-        bool? isActive = null,
-        CancellationToken cancellationToken = default) => throw new NotImplementedException();
-}
+// PricingRuleRepository is now implemented in Repositories/PricingRuleRepository.cs
 
 
 
@@ -352,11 +278,7 @@ public class InventorySnapshotService : IInventorySnapshotService
     public Task<Dictionary<Guid, int>> GetAvailabilitySnapshotAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 }
 
-public class PricingEngineService : IPricingEngineService
-{
-    public Task<decimal> CalculateDynamicPriceAsync(Guid eventId, Guid ticketTypeId, int demandLevel, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<bool> IsDynamicPricingEnabledAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-}
+// PricingEngineService is now implemented in Services/PricingEngineService.cs
 
 public class EmailService : IEmailService
 {
@@ -536,25 +458,6 @@ public class CacheWarmupService : BackgroundService
         }
 
         _logger.LogInformation("Cache warmup service stopped");
-    }
-
-    private static void AddPerformanceMonitoring(IServiceCollection services, IConfiguration configuration)
-    {
-        // Register performance monitoring services
-        services.AddScoped<IPerformanceMonitoringService, PerformanceMonitoringService>();
-        services.AddScoped<ISlaMonitoringService, SlaMonitoringService>();
-
-        // Register database performance interceptor
-        services.AddScoped<PerformanceInterceptor>();
-
-        // Register background services for monitoring
-        services.AddHostedService<SlaMonitoringBackgroundService>();
-        services.AddHostedService<MetricsCleanupBackgroundService>();
-        services.AddHostedService<SystemMetricsCollectionService>();
-
-        // Configure performance monitoring options
-        services.Configure<Event.API.Middleware.PerformanceMonitoringOptions>(
-            configuration.GetSection("PerformanceMonitoring"));
     }
 }
 

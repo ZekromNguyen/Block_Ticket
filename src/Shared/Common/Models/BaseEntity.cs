@@ -1,8 +1,6 @@
-using MediatR;
-
 namespace Shared.Common.Models;
 
-public interface IDomainEvent : INotification
+public interface IDomainEvent
 {
     Guid Id => Guid.NewGuid();
     DateTime OccurredOn => DateTime.UtcNow;

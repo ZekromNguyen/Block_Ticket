@@ -1,8 +1,17 @@
-using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Application;
+using Event.Application.Common.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
 using System.Net;
+using SeatMapFormat = Event.Application.Interfaces.Application.SeatMapFormat;
+using SeatMapImportResult = Event.Application.Interfaces.Application.SeatMapImportResult;
+using SeatMapSchema = Event.Application.Interfaces.Application.SeatMapSchema;
+using SeatMapImportPreview = Event.Application.Interfaces.Application.SeatMapImportPreview;
+using SeatMapFormatInfo = Event.Application.Interfaces.Application.SeatMapFormatInfo;
+using SchemaValidationResult = Event.Application.Interfaces.Application.SchemaValidationResult;
+using SeatMapImportOptions = Event.Application.Interfaces.Application.SeatMapImportOptions;
+using SeatMapExportOptions = Event.Application.Interfaces.Application.SeatMapExportOptions;
+using SeatMapTemplateOptions = Event.Application.Interfaces.Application.SeatMapTemplateOptions;
 
 namespace Event.API.Controllers;
 
@@ -367,9 +376,8 @@ public class SeatMapController : ControllerBase
         {
             var options = new SeatMapTemplateOptions
             {
-                TemplateSize = templateSize,
                 VenueType = venueType,
-                IncludeSampleData = includeSampleData,
+                IncludeExampleData = includeSampleData,
                 IncludeDocumentation = true
             };
 
@@ -423,7 +431,19 @@ public class SeatMapController : ControllerBase
 
         try
         {
-            var result = await _bulkOperationsService.PerformBulkSeatOperationAsync(venueId, request, cancellationToken);
+            // Map API DTO to Application DTO
+            var applicationRequest = new Event.Application.Interfaces.Application.BulkSeatOperationRequest
+            {
+                Operation = request.Operation,
+                SeatIds = request.SeatIds,
+                OperationData = request.OperationData != null ? 
+                    new Dictionary<string, object> { { "data", request.OperationData } } : 
+                    new Dictionary<string, object>(),
+                BatchSize = 1000,
+                ContinueOnError = true
+            };
+            
+            var result = await _bulkOperationsService.PerformBulkSeatOperationAsync(venueId, applicationRequest, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -547,9 +567,10 @@ public class SeatMapController : ControllerBase
         {
             var result = await _bulkOperationsService.RestoreSeatMapVersionAsync(venueId, versionId, cancellationToken);
 
-            if (!result.Success)
+            // Check if we have valid restoration results
+            if (result.RestoredSeats == 0)
             {
-                return BadRequest(result);
+                return BadRequest("No seats were restored");
             }
 
             return Ok(result);

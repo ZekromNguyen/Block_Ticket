@@ -1,7 +1,6 @@
 using Event.Application.Common.Models;
 using Event.Application.Features.Events.Queries.GetEvent;
 using Event.Application.Features.Events.Queries.SearchEvents;
-using Event.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
@@ -63,50 +62,6 @@ public class PublicEventsController : ControllerBase
         Response.Headers.Add("X-Page-Number", result.PageNumber.ToString());
         Response.Headers.Add("X-Page-Size", result.PageSize.ToString());
         Response.Headers.Add("X-Total-Pages", result.TotalPages.ToString());
-
-        return Ok(result);
-    }
-
-    /// <summary>
-    /// Search public events with cursor-based pagination (recommended for mobile/large datasets)
-    /// </summary>
-    /// <param name="request">Cursor-based search request parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Cursor-paginated search results</returns>
-    [HttpGet("search/cursor")]
-    [ProducesResponseType(typeof(CursorPagedResult<EventCatalogDto>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.BadRequest)]
-    public async Task<ActionResult<CursorPagedResult<EventCatalogDto>>> SearchPublicEventsCursor(
-        [FromQuery] SearchEventsCursorRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Cursor-based search for public events with term: {SearchTerm}", request.SearchTerm);
-
-        // Force only available events for public endpoint
-        var query = SearchEventsCursorQuery.FromCursorRequest(request) with
-        {
-            HasAvailability = true,
-            Status = request.Status ?? EventStatus.OnSale // Default to OnSale for public
-        };
-
-        var result = await _mediator.Send(query, cancellationToken);
-
-        // Add cursor pagination headers
-        if (result.NextCursor != null)
-        {
-            Response.Headers.Add("X-Next-Cursor", result.NextCursor);
-        }
-        if (result.PreviousCursor != null)
-        {
-            Response.Headers.Add("X-Previous-Cursor", result.PreviousCursor);
-        }
-        Response.Headers.Add("X-Has-Next-Page", result.HasNextPage.ToString());
-        Response.Headers.Add("X-Has-Previous-Page", result.HasPreviousPage.ToString());
-        Response.Headers.Add("X-Page-Size", result.PageSize.ToString());
-        if (result.TotalCount.HasValue)
-        {
-            Response.Headers.Add("X-Total-Count", result.TotalCount.Value.ToString());
-        }
 
         return Ok(result);
     }

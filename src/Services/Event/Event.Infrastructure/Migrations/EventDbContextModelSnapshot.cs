@@ -163,6 +163,12 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Categories")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -188,6 +194,20 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<DateTime>("ETagUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("etag_updated_at");
+
+                    b.Property<string>("ETagValue")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("etag_value");
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("EventDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -198,11 +218,24 @@ namespace Event.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("PromoterId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bytea")
+                        .HasColumnName("row_version");
 
                     b.Property<NpgsqlTsVector>("SearchVector")
                         .IsRequired()
@@ -225,6 +258,9 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("slug");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -263,6 +299,12 @@ namespace Event.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ETagUpdatedAt")
+                        .HasDatabaseName("IX_EventAggregate_ETagTimestamp");
+
+                    b.HasIndex("ETagValue")
+                        .HasDatabaseName("IX_EventAggregate_ETag");
+
                     b.HasIndex("PromoterId")
                         .HasDatabaseName("IX_Events_PromoterId");
 
@@ -290,6 +332,10 @@ namespace Event.Infrastructure.Migrations
 
                     b.ToTable("events", "event", t =>
                         {
+                            t.HasCheckConstraint("CK_EventAggregate_ETag_NotEmpty", "LENGTH(etag_value) > 0");
+
+                            t.HasCheckConstraint("CK_EventAggregate_ETag_ValidTimestamp", "etag_updated_at <= NOW() AND etag_updated_at > '2024-01-01'::timestamp");
+
                             t.HasCheckConstraint("CK_Events_EventDate_Future", "\"EventDate\" > \"CreatedAt\"");
 
                             t.HasCheckConstraint("CK_Events_PublishWindow_Valid", "publish_start_date IS NULL OR publish_end_date IS NULL OR publish_start_date < publish_end_date");
@@ -717,6 +763,10 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("CustomerEmail")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("CustomerNotes")
                         .HasColumnType("text");
 
@@ -749,8 +799,10 @@ namespace Event.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Active");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -973,6 +1025,13 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime>("ETagUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ETagValue")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
@@ -1092,6 +1151,9 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("SeatMap")
+                        .HasColumnType("text");
+
                     b.Property<string>("SeatMapChecksum")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -1101,6 +1163,9 @@ namespace Event.Infrastructure.Migrations
 
                     b.Property<string>("SeatMapMetadata")
                         .HasColumnType("jsonb");
+
+                    b.Property<string>("SeatMapVersion")
+                        .HasColumnType("text");
 
                     b.Property<string>("TimeZone")
                         .IsRequired()
@@ -1148,6 +1213,382 @@ namespace Event.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_Venues_Website_Format", "\"Website\" IS NULL OR \"Website\" ~ '^https?://'");
                         });
+                });
+
+            modelBuilder.Entity("Event.Domain.Models.ApprovalAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ApprovalWorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("Timestamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("UserAgent")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action")
+                        .HasDatabaseName("IX_ApprovalAuditLogs_Action");
+
+                    b.HasIndex("ApprovalWorkflowId")
+                        .HasDatabaseName("IX_ApprovalAuditLogs_WorkflowId");
+
+                    b.HasIndex("Timestamp")
+                        .HasDatabaseName("IX_ApprovalAuditLogs_Timestamp");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_ApprovalAuditLogs_UserId");
+
+                    b.HasIndex("ApprovalWorkflowId", "Timestamp")
+                        .HasDatabaseName("IX_ApprovalAuditLogs_Workflow_Timestamp");
+
+                    b.ToTable("approval_audit_logs", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Models.ApprovalStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApprovalWorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApproverEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ApproverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApproverName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ApproverRole")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Comments")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<DateTime>("DecisionAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("DecisionMetadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalWorkflowId")
+                        .HasDatabaseName("IX_ApprovalSteps_WorkflowId");
+
+                    b.HasIndex("ApproverId")
+                        .HasDatabaseName("IX_ApprovalSteps_ApproverId");
+
+                    b.HasIndex("Decision")
+                        .HasDatabaseName("IX_ApprovalSteps_Decision");
+
+                    b.HasIndex("DecisionAt")
+                        .HasDatabaseName("IX_ApprovalSteps_DecisionAt");
+
+                    b.HasIndex("ApprovalWorkflowId", "ApproverId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ApprovalSteps_Workflow_Approver");
+
+                    b.ToTable("approval_steps", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Models.ApprovalWorkflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BusinessJustification")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompletionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("CurrentApprovals")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExpectedImpact")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OperationData")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OperationDescription")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Normal");
+
+                    b.Property<string>("RequesterEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("RequesterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequesterName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("RequiredApprovals")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
+                    b.Property<string>("RiskLevel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Medium");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_ApprovalWorkflows_CreatedAt");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("IX_ApprovalWorkflows_ExpiresAt")
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.HasIndex("OperationType")
+                        .HasDatabaseName("IX_ApprovalWorkflows_OperationType");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("IX_ApprovalWorkflows_OrganizationId");
+
+                    b.HasIndex("Priority")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Priority");
+
+                    b.HasIndex("RequesterId")
+                        .HasDatabaseName("IX_ApprovalWorkflows_RequesterId");
+
+                    b.HasIndex("RiskLevel")
+                        .HasDatabaseName("IX_ApprovalWorkflows_RiskLevel");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Status");
+
+                    b.HasIndex("EntityType", "EntityId")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Entity");
+
+                    b.HasIndex("OrganizationId", "CreatedAt")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Organization_Created");
+
+                    b.HasIndex("OrganizationId", "Status")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Organization_Status");
+
+                    b.HasIndex("Status", "ExpiresAt")
+                        .HasDatabaseName("IX_ApprovalWorkflows_Status_ExpiresAt");
+
+                    b.ToTable("approval_workflows", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Models.ApprovalWorkflowTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long>("DefaultExpirationTime")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(6048000000000L);
+
+                    b.Property<string>("DefaultRiskLevel")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Medium");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OperationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RequiredApprovals")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(2);
+
+                    b.Property<string>("RequiredRoles")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_ApprovalTemplates_IsActive");
+
+                    b.HasIndex("OperationType")
+                        .HasDatabaseName("IX_ApprovalTemplates_OperationType");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("IX_ApprovalTemplates_OrganizationId");
+
+                    b.HasIndex("OrganizationId", "OperationType")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ApprovalTemplates_Organization_Operation");
+
+                    b.ToTable("approval_workflow_templates", "event");
                 });
 
             modelBuilder.Entity("Event.Infrastructure.Persistence.Entities.AuditLog", b =>
@@ -1683,6 +2124,15 @@ namespace Event.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Event.Domain.Models.ApprovalStep", b =>
+                {
+                    b.HasOne("Event.Domain.Models.ApprovalWorkflow", null)
+                        .WithMany("ApprovalSteps")
+                        .HasForeignKey("ApprovalWorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Event.Domain.Entities.EventAggregate", b =>
                 {
                     b.Navigation("Allocations");
@@ -1700,6 +2150,11 @@ namespace Event.Infrastructure.Migrations
             modelBuilder.Entity("Event.Domain.Entities.Venue", b =>
                 {
                     b.Navigation("Seats");
+                });
+
+            modelBuilder.Entity("Event.Domain.Models.ApprovalWorkflow", b =>
+                {
+                    b.Navigation("ApprovalSteps");
                 });
 #pragma warning restore 612, 618
         }

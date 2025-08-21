@@ -1,5 +1,5 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -11,18 +11,15 @@ namespace Event.API.Middleware;
 public class PerformanceMonitoringMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly IPerformanceMonitoringService _performanceMonitoringService;
     private readonly ILogger<PerformanceMonitoringMiddleware> _logger;
     private readonly PerformanceMonitoringOptions _options;
 
     public PerformanceMonitoringMiddleware(
         RequestDelegate next,
-        IPerformanceMonitoringService performanceMonitoringService,
         ILogger<PerformanceMonitoringMiddleware> logger,
         IConfiguration configuration)
     {
         _next = next;
-        _performanceMonitoringService = performanceMonitoringService;
         _logger = logger;
         _options = configuration.GetSection("PerformanceMonitoring").Get<PerformanceMonitoringOptions>() 
                    ?? new PerformanceMonitoringOptions();
@@ -63,6 +60,9 @@ public class PerformanceMonitoringMiddleware
         {
             stopwatch.Stop();
             
+            // Get the performance monitoring service from the current scope
+            var performanceMonitoringService = context.RequestServices.GetRequiredService<IPerformanceMonitoringService>();
+            
             // Record the performance metric asynchronously
             _ = Task.Run(async () =>
             {
@@ -75,7 +75,8 @@ public class PerformanceMonitoringMiddleware
                         initialMemory,
                         responseStatusCode,
                         correlationId,
-                        capturedException);
+                        capturedException,
+                        performanceMonitoringService);
                 }
                 catch (Exception ex)
                 {
@@ -92,7 +93,8 @@ public class PerformanceMonitoringMiddleware
         long initialMemory,
         int statusCode,
         string correlationId,
-        Exception? exception)
+        Exception? exception,
+        IPerformanceMonitoringService performanceMonitoringService)
     {
         var currentMemory = GC.GetTotalMemory(false);
         var memoryUsed = currentMemory - initialMemory;
@@ -133,7 +135,7 @@ public class PerformanceMonitoringMiddleware
         // Only record if enabled and within sampling rate
         if (_options.Enabled && ShouldSample())
         {
-            await _performanceMonitoringService.RecordMetricAsync(metric);
+            await performanceMonitoringService.RecordMetricAsync(metric);
         }
 
         // Log critical performance issues immediately

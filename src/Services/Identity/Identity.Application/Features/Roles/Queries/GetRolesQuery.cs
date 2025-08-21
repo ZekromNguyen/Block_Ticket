@@ -49,7 +49,7 @@ public class GetRolesQueryHandler : IQueryHandler<GetRolesQuery, Result<IEnumera
                 IsSystemRole = r.IsSystemRole,
                 IsActive = r.IsActive,
                 Priority = r.Priority,
-                Permissions = r.GetActivePermissions().Select(p => new PermissionDto
+                Permissions = r.Permissions.Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,
@@ -103,7 +103,7 @@ public class GetRoleByNameQueryHandler : IQueryHandler<GetRoleByNameQuery, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.GetActivePermissions().Select(p => new PermissionDto
+                Permissions = role.Permissions.Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,

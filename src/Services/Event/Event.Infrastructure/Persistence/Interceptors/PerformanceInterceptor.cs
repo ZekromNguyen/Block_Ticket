@@ -185,7 +185,8 @@ public class PerformanceInterceptor : DbCommandInterceptor
         try
         {
             // Try to get HttpContext from IHttpContextAccessor if available
-            var httpContextAccessor = ServiceLocator.Current?.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>();
+            var httpContextAccessor = ServiceLocator.Current?.GetService(typeof(Microsoft.AspNetCore.Http.IHttpContextAccessor)) 
+                as Microsoft.AspNetCore.Http.IHttpContextAccessor;
             return httpContextAccessor?.HttpContext;
         }
         catch

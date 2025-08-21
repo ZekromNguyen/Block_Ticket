@@ -1,8 +1,10 @@
 using Event.Domain.ValueObjects;
+using Event.Application.Interfaces.Application;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using ETagMismatchException = Event.Domain.ValueObjects.ETagMismatchException;
 
 namespace Event.API.Middleware;
 

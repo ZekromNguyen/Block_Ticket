@@ -1,4 +1,4 @@
-using Event.Domain.Services;
+using Event.Application.Interfaces.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

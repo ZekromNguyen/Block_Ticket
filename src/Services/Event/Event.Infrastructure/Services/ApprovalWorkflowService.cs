@@ -1,20 +1,23 @@
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Common.Models;
+using Event.Application.Interfaces.Services;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace Event.Infrastructure.Services;
 
 /// <summary>
-/// Implementation of approval workflow service
+/// Infrastructure implementation of the approval workflow service
 /// </summary>
 public class ApprovalWorkflowService : IApprovalWorkflowService
 {
     private readonly IApprovalWorkflowRepository _workflowRepository;
+    private readonly IEventRepository _eventRepository;
+    private readonly IVenueRepository _venueRepository;
+    private readonly IApprovalNotificationService _notificationService;
     private readonly IApprovalWorkflowTemplateRepository _templateRepository;
     private readonly IApprovalAuditLogRepository _auditRepository;
-    private readonly IApprovalNotificationService _notificationService;
     private readonly ILogger<ApprovalWorkflowService> _logger;
 
     public ApprovalWorkflowService(
@@ -169,7 +172,16 @@ public class ApprovalWorkflowService : IApprovalWorkflowService
         int pageSize = 20,
         CancellationToken cancellationToken = default)
     {
-        return await _workflowRepository.GetPagedAsync(organizationId, filter, pageNumber, pageSize, cancellationToken);
+        var repositoryResult = await _workflowRepository.GetPagedAsync(organizationId, filter, pageNumber, pageSize, cancellationToken);
+        
+        // Map from Domain.Common.PagedResult to Application.Common.PagedResult
+        return new PagedResult<ApprovalWorkflow>
+        {
+            Items = repositoryResult.Items.ToList(),
+            TotalCount = repositoryResult.TotalCount,
+            PageNumber = repositoryResult.PageNumber,
+            PageSize = repositoryResult.PageSize
+        };
     }
 
     public async Task<List<ApprovalWorkflow>> GetPendingApprovalsAsync(

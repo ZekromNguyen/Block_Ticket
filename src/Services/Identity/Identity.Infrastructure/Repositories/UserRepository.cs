@@ -25,8 +25,7 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.RolePermissions)
-                        .ThenInclude(rp => rp.Permission)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
@@ -37,8 +36,7 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.RolePermissions)
-                        .ThenInclude(rp => rp.Permission)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 
@@ -49,8 +47,7 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.RolePermissions)
-                        .ThenInclude(rp => rp.Permission)
+                    .ThenInclude(r => r.Permissions)
             .FirstOrDefaultAsync(u => u.WalletAddress == walletAddress, cancellationToken);
     }
 
@@ -58,13 +55,6 @@ public class UserRepository : IUserRepository
     {
         return await _context.Users
             .Where(u => u.UserType == userType)
-            .OrderBy(u => u.CreatedAt)
-            .ToListAsync(cancellationToken);
-    }
-
-    public async Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return await _context.Users
             .OrderBy(u => u.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -100,7 +90,8 @@ public class UserRepository : IUserRepository
         try
         {
             _context.Users.Update(user);
-            _logger.LogDebug("User {UserId} updated in context", user.Id);
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogDebug("User {UserId} updated successfully", user.Id);
         }
         catch (Exception ex)
         {
@@ -114,7 +105,8 @@ public class UserRepository : IUserRepository
         try
         {
             _context.Users.Remove(user);
-            _logger.LogDebug("User {UserId} marked for deletion in context", user.Id);
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogDebug("User {UserId} deleted successfully", user.Id);
         }
         catch (Exception ex)
         {

@@ -13,6 +13,4 @@ public interface IUserSessionRepository
     Task DeleteAsync(UserSession session, CancellationToken cancellationToken = default);
     Task DeleteExpiredSessionsAsync(CancellationToken cancellationToken = default);
     Task EndAllUserSessionsAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<int> GetActiveSessionCountAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<UserSession>> GetOldestActiveSessionsAsync(Guid userId, int count, CancellationToken cancellationToken = default);
 }

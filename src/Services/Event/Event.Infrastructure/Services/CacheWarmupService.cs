@@ -1,6 +1,7 @@
 using Event.Domain.Configuration;
 using Event.Domain.Interfaces;
-using Event.Domain.Services;
+using Event.Domain.Enums;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,12 +38,25 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
 
         _logger.LogInformation("Cache warmup service starting with interval: {Interval}", _config.Warmup.Interval);
 
-        // Initial warmup after a short delay
-        await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-        await WarmupAsync(stoppingToken);
+        try
+        {
+            // Initial warmup after a short delay
+            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            await WarmupAsync(stoppingToken);
 
-        // Schedule periodic warmup
-        await ScheduleWarmupAsync(_config.Warmup.Interval, stoppingToken);
+            // Schedule periodic warmup
+            await ScheduleWarmupAsync(_config.Warmup.Interval, stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when cancellation is requested during shutdown
+            _logger.LogInformation("Cache warmup service stopped");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in cache warmup service");
+            throw;
+        }
     }
 
     public async Task WarmupAsync(CancellationToken cancellationToken = default)
@@ -109,9 +123,17 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
     {
         using var timer = new PeriodicTimer(interval);
         
-        while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
+        try
         {
-            await WarmupAsync(cancellationToken);
+            while (!cancellationToken.IsCancellationRequested && await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await WarmupAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when cancellation is requested during shutdown
+            _logger.LogInformation("Cache warmup service cancelled");
         }
     }
 
@@ -125,9 +147,8 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
         try
         {
             // Get popular/featured events (published, not expired)
-            var popularEvents = await eventRepository.GetFeaturedEventsAsync(
-                take: _config.Warmup.MaxItemsPerType,
-                cancellationToken: cancellationToken);
+            // TODO: Replace with GetFeaturedEventsAsync when implemented
+            var popularEvents = await eventRepository.GetPublishedEventsAsync(cancellationToken);
 
             var warmupTasks = popularEvents.Select(async eventEntity =>
             {
@@ -170,9 +191,8 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
         try
         {
             // Get venues with upcoming events
-            var activeVenues = await venueRepository.GetVenuesWithUpcomingEventsAsync(
-                take: _config.Warmup.MaxItemsPerType,
-                cancellationToken: cancellationToken);
+            // TODO: Replace with GetVenuesWithUpcomingEventsAsync when implemented
+            var activeVenues = await venueRepository.GetAllAsync(cancellationToken);
 
             var warmupTasks = activeVenues.Select(async venue =>
             {
@@ -210,9 +230,8 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
         {
             // Get events with upcoming dates
             var eventRepository = scope.ServiceProvider.GetRequiredService<IEventRepository>();
-            var upcomingEvents = await eventRepository.GetUpcomingEventsAsync(
-                take: _config.Warmup.MaxItemsPerType,
-                cancellationToken: cancellationToken);
+            // TODO: Replace with GetUpcomingEventsAsync when implemented
+            var upcomingEvents = await eventRepository.GetPublishedEventsAsync(cancellationToken);
 
             var warmupTasks = upcomingEvents.Select(async eventEntity =>
             {
@@ -268,15 +287,26 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
                     var searchKey = $"search:events:{scenario.Category ?? "all"}:{scenario.Location}:{scenario.PageSize}";
                     
                     // Get search results
+                    var categories = scenario.Category != null ? new List<string> { scenario.Category } : null;
                     var searchResults = await eventRepository.SearchEventsAsync(
                         searchTerm: null,
-                        category: scenario.Category,
-                        location: scenario.Location == "popular" ? "New York" : null, // Example popular location
-                        pageNumber: 1,
-                        pageSize: scenario.PageSize,
+                        startDate: null,
+                        endDate: null,
+                        venueId: null,
+                        categories: categories,
+                        minPrice: null,
+                        maxPrice: null,
+                        hasAvailability: null,
+                        skip: 0,
+                        take: scenario.PageSize,
                         cancellationToken: cancellationToken);
                     
-                    await cacheService.SetAsync(searchKey, searchResults, TimeSpan.FromMinutes(5), cancellationToken);
+                    // Wrap tuple in an object to make it cacheable
+                    var cacheableResult = new { 
+                        Events = searchResults.Events, 
+                        TotalCount = searchResults.TotalCount 
+                    };
+                    await cacheService.SetAsync(searchKey, cacheableResult, TimeSpan.FromMinutes(5), cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -303,13 +333,12 @@ public class CacheWarmupService : BackgroundService, ICacheWarmupService
         try
         {
             // Get events starting soon (next 7 days)
-            var upcomingEvents = await eventRepository.GetUpcomingEventsAsync(
-                take: _config.Warmup.MaxItemsPerType,
-                cancellationToken: cancellationToken);
+            // TODO: Replace with GetUpcomingEventsAsync when implemented
+            var upcomingEvents = await eventRepository.GetPublishedEventsAsync(cancellationToken);
 
             var warmupTasks = upcomingEvents.Where(e => 
-                e.StartDate >= DateTime.UtcNow && 
-                e.StartDate <= DateTime.UtcNow.AddDays(7))
+                e.EventDate >= DateTime.UtcNow && 
+                e.EventDate <= DateTime.UtcNow.AddDays(7))
                 .Select(async eventEntity =>
             {
                 try

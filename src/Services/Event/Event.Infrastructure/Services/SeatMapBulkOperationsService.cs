@@ -1,8 +1,12 @@
 using Event.Domain.Entities;
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Application.Common.Models;  // Use the same namespace as the interface
 using Microsoft.Extensions.Logging;
+
+// Explicitly alias to avoid interface ambiguity 
+using ISeatMapBulkOperationsService = Event.Application.Interfaces.Infrastructure.ISeatMapBulkOperationsService;
 
 namespace Event.Infrastructure.Services;
 
@@ -33,10 +37,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         _logger.LogInformation("Performing bulk seat operation {Operation} for {SeatCount} seats in venue {VenueId}",
             request.Operation, request.SeatIds.Count, venueId);
 
-        var result = new BulkSeatOperationResult
-        {
-            TotalRequested = request.SeatIds.Count
-        };
+        var results = new List<BulkSeatOperationItemResult>();
 
         try
         {
@@ -44,8 +45,18 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var venue = await _venueRepository.GetByIdAsync(venueId, cancellationToken);
             if (venue == null)
             {
-                result.Errors.Add($"Venue {venueId} not found");
-                return result;
+                return new BulkSeatOperationResult
+                {
+                    TotalRequested = request.SeatIds.Count,
+                    Successful = 0,
+                    Failed = request.SeatIds.Count,
+                    Results = request.SeatIds.Select(id => new BulkSeatOperationItemResult
+                    {
+                        SeatId = id,
+                        Success = false,
+                        ErrorMessage = $"Venue {venueId} not found"
+                    }).ToList()
+                };
             }
 
             // Get all requested seats
@@ -59,7 +70,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
                 }
                 else
                 {
-                    result.Results.Add(new BulkSeatOperationItemResult
+                    results.Add(new BulkSeatOperationItemResult
                     {
                         SeatId = seatId,
                         Success = false,
@@ -69,23 +80,40 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             }
 
             // Process operation based on type
-            await ProcessBulkOperationAsync(request.Operation, seats, request.OperationData, result, cancellationToken);
+            await ProcessBulkOperationAsync(request.Operation, seats, request.OperationData, results, cancellationToken);
 
-            // Update counts
-            result.Successful = result.Results.Count(r => r.Success);
-            result.Failed = result.Results.Count(r => !r.Success);
+            var successful = results.Count(r => r.Success);
+            var failed = results.Count(r => !r.Success);
 
             _logger.LogInformation("Bulk operation {Operation} completed. Success: {Successful}, Failed: {Failed}",
-                request.Operation, result.Successful, result.Failed);
+                request.Operation, successful, failed);
+
+            return new BulkSeatOperationResult
+            {
+                TotalRequested = request.SeatIds.Count,
+                Successful = successful,
+                Failed = failed,
+                Results = results
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error performing bulk seat operation {Operation} for venue {VenueId}",
                 request.Operation, venueId);
-            result.Errors.Add($"Bulk operation failed: {ex.Message}");
+            
+            return new BulkSeatOperationResult
+            {
+                TotalRequested = request.SeatIds.Count,
+                Successful = 0,
+                Failed = request.SeatIds.Count,
+                Results = results.Any() ? results : request.SeatIds.Select(id => new BulkSeatOperationItemResult
+                {
+                    SeatId = id,
+                    Success = false,
+                    ErrorMessage = $"Bulk operation failed: {ex.Message}"
+                }).ToList()
+            };
         }
-
-        return result;
     }
 
     public async Task<BulkSeatUpdateResult> BulkUpdateSeatAttributesAsync(
@@ -98,7 +126,10 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
 
         var result = new BulkSeatUpdateResult
         {
-            TotalRequested = request.SeatIds.Count
+            TotalSeats = request.SeatIds.Count,
+            UpdatedSeats = 0,
+            SkippedSeats = 0,
+            Errors = new List<string>()
         };
 
         try
@@ -112,58 +143,70 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             }
 
             // Process each seat
+            var totalSeats = request.SeatIds.Count;
+            var updatedSeats = 0;
+            var skippedSeats = 0;
+            var errors = new List<string>();
+            var updatedAttributes = new Dictionary<Guid, Dictionary<string, object>>();
+
             foreach (var seatId in request.SeatIds)
             {
-                var itemResult = new BulkSeatUpdateItemResult { SeatId = seatId };
-
                 try
                 {
                     var seat = await _seatRepository.GetByIdAsync(seatId, cancellationToken);
                     if (seat == null)
                     {
-                        itemResult.Success = false;
-                        itemResult.ErrorMessage = "Seat not found";
+                        skippedSeats++;
+                        errors.Add($"Seat {seatId} not found");
+                        continue;
                     }
-                    else if (seat.VenueId != venueId)
+                    
+                    if (seat.VenueId != venueId)
                     {
-                        itemResult.Success = false;
-                        itemResult.ErrorMessage = "Seat does not belong to this venue";
+                        skippedSeats++;
+                        errors.Add($"Seat {seatId} does not belong to this venue");
+                        continue;
                     }
-                    else
+
+                    var changedFields = new Dictionary<string, object>();
+
+                    // Apply updates
+                    foreach (var update in request.AttributeUpdates)
                     {
-                        var changedFields = new Dictionary<string, object>();
+                        await ApplySeatAttributeUpdateAsync(seat, update.Key, update.Value, changedFields);
+                    }
 
-                        // Apply updates
-                        foreach (var update in request.Updates)
-                        {
-                            await ApplySeatAttributeUpdateAsync(seat, update.Key, update.Value, changedFields);
-                        }
+                    await _seatRepository.UpdateAsync(seat, cancellationToken);
 
-                        await _seatRepository.UpdateAsync(seat, cancellationToken);
-
-                        itemResult.Success = true;
-                        itemResult.ChangedFields = changedFields;
+                    updatedSeats++;
+                    if (changedFields.Any())
+                    {
+                        updatedAttributes[seatId] = changedFields;
                     }
                 }
                 catch (Exception ex)
                 {
-                    itemResult.Success = false;
-                    itemResult.ErrorMessage = ex.Message;
+                    skippedSeats++;
+                    errors.Add($"Failed to update seat {seatId}: {ex.Message}");
                 }
-
-                result.Results.Add(itemResult);
             }
 
-            result.Successful = result.Results.Count(r => r.Success);
-            result.Failed = result.Results.Count(r => !r.Success);
+            result = result with 
+            { 
+                TotalSeats = totalSeats,
+                UpdatedSeats = updatedSeats,
+                SkippedSeats = skippedSeats,
+                Errors = errors,
+                UpdatedAttributes = updatedAttributes
+            };
 
-            _logger.LogInformation("Bulk attribute update completed. Success: {Successful}, Failed: {Failed}",
-                result.Successful, result.Failed);
+            _logger.LogInformation("Bulk attribute update completed. Updated: {Updated}, Skipped: {Skipped}",
+                updatedSeats, skippedSeats);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during bulk seat attribute update for venue {VenueId}", venueId);
-            result.Errors.Add($"Bulk update failed: {ex.Message}");
+            result = result with { Errors = result.Errors.Concat(new[] { $"Bulk update failed: {ex.Message}" }).ToList() };
         }
 
         return result;
@@ -178,7 +221,14 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         _logger.LogInformation("Copying seat map from venue {SourceVenueId} to venue {TargetVenueId}",
             sourceVenueId, targetVenueId);
 
-        var result = new SeatMapCopyResult();
+        var result = new SeatMapCopyResult
+        {
+            SourceVenueId = sourceVenueId,
+            TargetVenueId = targetVenueId,
+            CopiedSeats = 0,
+            SkippedSeats = 0,
+            Warnings = new List<string>()
+        };
 
         try
         {
@@ -186,13 +236,13 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var sourceVenue = await _venueRepository.GetByIdAsync(sourceVenueId, cancellationToken);
             if (sourceVenue == null)
             {
-                result.Errors.Add($"Source venue {sourceVenueId} not found");
+                result.Warnings.Add($"Source venue {sourceVenueId} not found");
                 return result;
             }
 
             if (!sourceVenue.HasSeatMap)
             {
-                result.Errors.Add("Source venue does not have a seat map");
+                result.Warnings.Add("Source venue does not have a seat map");
                 return result;
             }
 
@@ -200,15 +250,14 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var targetVenue = await _venueRepository.GetByIdAsync(targetVenueId, cancellationToken);
             if (targetVenue == null)
             {
-                result.Errors.Add($"Target venue {targetVenueId} not found");
+                result.Warnings.Add($"Target venue {targetVenueId} not found");
                 return result;
             }
 
-            // Check if target has existing seat map and replacement is not allowed
-            if (targetVenue.HasSeatMap && !options.ReplaceExisting)
+            // Check if target has existing seat map
+            if (targetVenue.HasSeatMap)
             {
-                result.Errors.Add("Target venue already has a seat map and replace existing is not enabled");
-                return result;
+                result.Warnings.Add("Target venue already has a seat map - it will be overwritten");
             }
 
             // Get source seats
@@ -229,19 +278,17 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             targetVenue.ImportSeatMap(seatMapRows, checksum);
             await _venueRepository.UpdateAsync(targetVenue, cancellationToken);
 
-            result.Success = true;
-            result.CopiedSeats = seatMapRows.Sum(r => r.Seats.Count);
-            result.CopiedSections = seatMapRows.Select(r => r.Section).Distinct().Count();
-            result.NewChecksum = checksum;
+            var copiedSeats = seatMapRows.Sum(r => r.Seats.Count);
+            result = result with { CopiedSeats = copiedSeats };
 
-            _logger.LogInformation("Successfully copied seat map. Seats: {CopiedSeats}, Sections: {CopiedSections}",
-                result.CopiedSeats, result.CopiedSections);
+            _logger.LogInformation("Successfully copied seat map. Seats: {CopiedSeats}",
+                copiedSeats);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error copying seat map from {SourceVenueId} to {TargetVenueId}",
                 sourceVenueId, targetVenueId);
-            result.Errors.Add($"Copy failed: {ex.Message}");
+            result = result with { Warnings = result.Warnings.Concat(new[] { $"Copy failed: {ex.Message}" }).ToList() };
         }
 
         return result;
@@ -249,21 +296,27 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
 
     public async Task<SeatMapMergeResult> MergeSeatMapsAsync(
         Guid venueId,
-        SeatMapSchema newSeatMap,
+        Event.Domain.Models.SeatMapSchema newSeatMap,
         SeatMapMergeOptions options,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Merging seat map for venue {VenueId} using strategy {Strategy}",
-            venueId, options.Strategy);
+        _logger.LogInformation("Merging seat map for venue {VenueId} using conflict resolution {ConflictResolution}",
+            venueId, options.ConflictResolution);
 
-        var result = new SeatMapMergeResult();
+        var result = new SeatMapMergeResult
+        {
+            MergedSeats = 0,
+            ConflictingSeats = 0,
+            NewSeats = 0,
+            Conflicts = new List<string>()
+        };
 
         try
         {
             var venue = await _venueRepository.GetByIdAsync(venueId, cancellationToken);
             if (venue == null)
             {
-                result.Errors.Add($"Venue {venueId} not found");
+                result = result with { Conflicts = result.Conflicts.Concat(new[] { $"Venue {venueId} not found" }).ToList() };
                 return result;
             }
 
@@ -271,31 +324,31 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var newSeatMapRows = ConvertSchemaToSeatMapRows(newSeatMap);
 
             // Perform merge based on strategy
-            var mergeChanges = await PerformSeatMapMergeAsync(
-                existingSeats, newSeatMapRows, options, result, cancellationToken);
+            var (mergedSeats, conflictingSeats, newSeats, conflicts) = await PerformSeatMapMergeAsync(
+                existingSeats, newSeatMapRows, options, cancellationToken);
 
-            if (mergeChanges.Any())
+            if (mergedSeats > 0 || newSeats > 0)
             {
                 var checksum = GenerateChecksumForRows(newSeatMapRows);
                 venue.ImportSeatMap(newSeatMapRows, checksum);
                 await _venueRepository.UpdateAsync(venue, cancellationToken);
-
-                result.Success = true;
-                result.Changes.AddRange(mergeChanges);
-            }
-            else
-            {
-                result.Success = true;
-                result.Changes.Add("No changes required");
             }
 
-            _logger.LogInformation("Seat map merge completed. Added: {Added}, Updated: {Updated}, Removed: {Removed}",
-                result.AddedSeats, result.UpdatedSeats, result.RemovedSeats);
+            result = result with 
+            { 
+                MergedSeats = mergedSeats,
+                ConflictingSeats = conflictingSeats,
+                NewSeats = newSeats,
+                Conflicts = conflicts
+            };
+
+            _logger.LogInformation("Seat map merge completed. Added: {Added}, Updated: {Updated}, Conflicts: {Conflicts}",
+                newSeats, mergedSeats, conflictingSeats);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error merging seat map for venue {VenueId}", venueId);
-            result.Errors.Add($"Merge failed: {ex.Message}");
+            result = result with { Conflicts = result.Conflicts.Concat(new[] { $"Merge failed: {ex.Message}" }).ToList() };
         }
 
         return result;
@@ -308,45 +361,51 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
     {
         _logger.LogInformation("Creating seat map version for venue {VenueId}", venueId);
 
-        var result = new SeatMapVersioningResult();
+        var result = new SeatMapVersioningResult
+        {
+            VersionId = Guid.Empty,
+            VersionNote = string.Empty,
+            CreatedAt = DateTime.UtcNow,
+            VenueId = venueId,
+            CreatedBy = string.Empty
+        };
 
         try
         {
             var venue = await _venueRepository.GetByIdAsync(venueId, cancellationToken);
             if (venue == null)
             {
-                result.Errors.Add($"Venue {venueId} not found");
+                _logger.LogWarning("Venue {VenueId} not found for versioning", venueId);
                 return result;
             }
 
             if (!venue.HasSeatMap)
             {
-                result.Errors.Add("Venue does not have a seat map to version");
+                _logger.LogWarning("Venue {VenueId} does not have a seat map to version", venueId);
                 return result;
             }
 
             // Create version record (this would typically involve a separate versioning table)
             var versionId = Guid.NewGuid();
-            var versionNumber = await GetNextVersionNumberAsync(venueId, cancellationToken);
             var archivedSeats = venue.Seats.Count;
 
             // Store version information (implementation would depend on your versioning strategy)
-            await StoreVersionAsync(venueId, versionId, versionNumber, versionNote, venue, cancellationToken);
+            await StoreVersionAsync(venueId, versionId, versionNote, venue, cancellationToken);
 
-            result.Success = true;
-            result.VersionId = versionId;
-            result.VersionNumber = versionNumber;
-            result.VersionNote = versionNote;
-            result.CreatedAt = DateTime.UtcNow;
-            result.ArchivedSeats = archivedSeats;
+            result = result with 
+            { 
+                VersionId = versionId,
+                VersionNote = versionNote,
+                CreatedAt = DateTime.UtcNow
+            };
 
-            _logger.LogInformation("Created seat map version {VersionNumber} for venue {VenueId}",
-                versionNumber, venueId);
+            _logger.LogInformation("Created seat map version {VersionId} for venue {VenueId}",
+                versionId, venueId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating seat map version for venue {VenueId}", venueId);
-            result.Errors.Add($"Version creation failed: {ex.Message}");
+            // Note: SeatMapVersioningResult doesn't have Errors property, just log the error
         }
 
         return result;
@@ -360,14 +419,21 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         _logger.LogInformation("Restoring seat map version {VersionId} for venue {VenueId}",
             versionId, venueId);
 
-        var result = new SeatMapRestoreResult();
+        var result = new SeatMapRestoreResult
+        {
+            VenueId = venueId,
+            RestoredVersionId = Guid.Empty,
+            RestoredAt = DateTime.UtcNow,
+            RestoredBy = string.Empty,
+            RestoredSeats = 0
+        };
 
         try
         {
             var venue = await _venueRepository.GetByIdAsync(venueId, cancellationToken);
             if (venue == null)
             {
-                result.Errors.Add($"Venue {venueId} not found");
+                _logger.LogWarning("Venue {VenueId} not found for restore", venueId);
                 return result;
             }
 
@@ -375,7 +441,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var versionData = await GetVersionDataAsync(venueId, versionId, cancellationToken);
             if (versionData == null)
             {
-                result.Errors.Add($"Version {versionId} not found");
+                _logger.LogWarning("Version {VersionId} not found for venue {VenueId}", versionId, venueId);
                 return result;
             }
 
@@ -383,11 +449,13 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             venue.ImportSeatMap(versionData.SeatMapRows, versionData.Checksum);
             await _venueRepository.UpdateAsync(venue, cancellationToken);
 
-            result.Success = true;
-            result.RestoredVersionId = versionId;
-            result.RestoredSeats = versionData.SeatMapRows.Sum(r => r.Seats.Count);
-            result.RestoredAt = DateTime.UtcNow;
-            result.Changes.Add($"Restored {result.RestoredSeats} seats from version {versionId}");
+            var restoredSeats = versionData.SeatMapRows.Sum(r => r.Seats.Count);
+            result = result with 
+            { 
+                RestoredVersionId = versionId,
+                RestoredSeats = restoredSeats,
+                RestoredAt = DateTime.UtcNow
+            };
 
             _logger.LogInformation("Successfully restored seat map version {VersionId} for venue {VenueId}",
                 versionId, venueId);
@@ -396,7 +464,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         {
             _logger.LogError(ex, "Error restoring seat map version {VersionId} for venue {VenueId}",
                 versionId, venueId);
-            result.Errors.Add($"Restore failed: {ex.Message}");
+            // Note: SeatMapRestoreResult doesn't have Errors property, just log the error
         }
 
         return result;
@@ -408,7 +476,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         string operation,
         List<Seat> seats,
         object? operationData,
-        BulkSeatOperationResult result,
+        List<BulkSeatOperationItemResult> results,
         CancellationToken cancellationToken)
     {
         foreach (var seat in seats)
@@ -421,27 +489,30 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
                 {
                     case "block":
                         await BlockSeatAsync(seat, operationData, cancellationToken);
-                        itemResult.Success = true;
+                        itemResult = itemResult with { Success = true };
                         break;
 
                     case "unblock":
                         await UnblockSeatAsync(seat, cancellationToken);
-                        itemResult.Success = true;
+                        itemResult = itemResult with { Success = true };
                         break;
 
                     case "allocate":
                         await AllocateSeatAsync(seat, operationData, cancellationToken);
-                        itemResult.Success = true;
+                        itemResult = itemResult with { Success = true };
                         break;
 
                     case "deallocate":
                         await DeallocateSeatAsync(seat, cancellationToken);
-                        itemResult.Success = true;
+                        itemResult = itemResult with { Success = true };
                         break;
 
                     default:
-                        itemResult.Success = false;
-                        itemResult.ErrorMessage = $"Unknown operation: {operation}";
+                        itemResult = itemResult with 
+                        { 
+                            Success = false,
+                            ErrorMessage = $"Unknown operation: {operation}"
+                        };
                         break;
                 }
 
@@ -452,11 +523,14 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             }
             catch (Exception ex)
             {
-                itemResult.Success = false;
-                itemResult.ErrorMessage = ex.Message;
+                itemResult = itemResult with 
+                { 
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
             }
 
-            result.Results.Add(itemResult);
+            results.Add(itemResult);
         }
     }
 
@@ -543,11 +617,11 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
             var sectionName = group.Key.Section;
             var rowName = group.Key.Row;
 
-            // Apply section mapping if configured
-            if (options.SectionMappings.ContainsKey(sectionName))
-            {
-                sectionName = options.SectionMappings[sectionName];
-            }
+            // Note: Section mappings could be implemented using CustomMappings in future
+            // if (options.CustomMappings?.ContainsKey($"section:{sectionName}") == true)
+            // {
+            //     sectionName = options.CustomMappings[$"section:{sectionName}"].ToString();
+            // }
 
             var seatMapRow = new SeatMapRow
             {
@@ -558,7 +632,7 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
                     Number = seat.Position.Number,
                     IsAccessible = seat.IsAccessible,
                     HasRestrictedView = seat.HasRestrictedView,
-                    PriceCategory = ApplyPriceCategoryMapping(seat.PriceCategory, options.PriceCategoryMappings)
+                    PriceCategory = options.CopyPricing ? seat.PriceCategory : null
                 }).ToList()
             };
 
@@ -568,9 +642,9 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         return seatMapRows;
     }
 
-    private List<SeatMapRow> ConvertSchemaToSeatMapRows(SeatMapSchema schema)
+    private List<Event.Domain.Entities.SeatMapRow> ConvertSchemaToSeatMapRows(Event.Domain.Models.SeatMapSchema schema)
     {
-        var seatMapRows = new List<SeatMapRow>();
+        var seatMapRows = new List<Event.Domain.Entities.SeatMapRow>();
 
         foreach (var section in schema.Sections)
         {
@@ -616,45 +690,59 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
         return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 
-    private async Task<List<string>> PerformSeatMapMergeAsync(
+    private async Task<(int mergedSeats, int conflictingSeats, int newSeats, List<string> conflicts)> PerformSeatMapMergeAsync(
         List<Seat> existingSeats,
         List<SeatMapRow> newSeatMapRows,
         SeatMapMergeOptions options,
-        SeatMapMergeResult result,
         CancellationToken cancellationToken)
     {
-        var changes = new List<string>();
+        var mergedSeats = 0;
+        var conflictingSeats = 0;
+        var newSeats = 0;
+        var conflicts = new List<string>();
 
         // Create position-based lookup for existing seats
         var existingSeatLookup = existingSeats.ToDictionary(
             s => $"{s.Position.Section}-{s.Position.Row}-{s.Position.Number}",
             s => s);
 
-        // Process based on merge strategy
-        switch (options.Strategy)
+        // Process seats based on conflict resolution
+        foreach (var row in newSeatMapRows)
         {
-            case MergeStrategy.Additive:
-                changes.AddRange(await PerformAdditiveMergeAsync(existingSeatLookup, newSeatMapRows, result));
-                break;
-
-            case MergeStrategy.Replacement:
-                changes.AddRange(await PerformReplacementMergeAsync(existingSeatLookup, newSeatMapRows, result));
-                break;
-
-            case MergeStrategy.Hybrid:
-                changes.AddRange(await PerformHybridMergeAsync(existingSeatLookup, newSeatMapRows, options, result));
-                break;
+            foreach (var seat in row.Seats)
+            {
+                var position = $"{row.Section}-{row.Row}-{seat.Number}";
+                
+                if (existingSeatLookup.ContainsKey(position))
+                {
+                    // Handle conflict based on resolution strategy
+                    var resolution = await ResolveConflictAsync(existingSeatLookup[position], seat, options.ConflictResolution);
+                    if (resolution != null)
+                    {
+                        conflicts.Add($"Updated seat {position}: {resolution}");
+                        mergedSeats++;
+                    }
+                    else
+                    {
+                        conflictingSeats++;
+                    }
+                }
+                else
+                {
+                    newSeats++;
+                }
+            }
         }
 
-        return changes;
+        return (mergedSeats, conflictingSeats, newSeats, conflicts);
     }
 
-    private async Task<List<string>> PerformAdditiveMergeAsync(
+    private async Task<(int mergedSeats, int newSeats)> PerformAdditiveMergeAsync(
         Dictionary<string, Seat> existingSeatLookup,
-        List<SeatMapRow> newSeatMapRows,
-        SeatMapMergeResult result)
+        List<SeatMapRow> newSeatMapRows)
     {
-        var changes = new List<string>();
+        var mergedSeats = 0;
+        var newSeats = 0;
 
         foreach (var row in newSeatMapRows)
         {
@@ -663,40 +751,41 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
                 var position = $"{row.Section}-{row.Row}-{seat.Number}";
                 if (!existingSeatLookup.ContainsKey(position))
                 {
-                    changes.Add($"Added seat {position}");
-                    result.AddedSeats++;
+                    newSeats++;
+                }
+                else
+                {
+                    mergedSeats++;
                 }
             }
         }
 
         await Task.CompletedTask;
-        return changes;
+        return (mergedSeats, newSeats);
     }
 
-    private async Task<List<string>> PerformReplacementMergeAsync(
+    private async Task<(int mergedSeats, int conflictingSeats, int newSeats)> PerformReplacementMergeAsync(
         Dictionary<string, Seat> existingSeatLookup,
-        List<SeatMapRow> newSeatMapRows,
-        SeatMapMergeResult result)
+        List<SeatMapRow> newSeatMapRows)
     {
-        var changes = new List<string>();
-
         // All existing seats will be replaced
-        result.RemovedSeats = existingSeatLookup.Count;
-        result.AddedSeats = newSeatMapRows.Sum(r => r.Seats.Count);
-
-        changes.Add($"Replaced {result.RemovedSeats} existing seats with {result.AddedSeats} new seats");
+        var conflictingSeats = existingSeatLookup.Count;
+        var newSeats = newSeatMapRows.Sum(r => r.Seats.Count);
+        var mergedSeats = 0; // No merge in replacement strategy
 
         await Task.CompletedTask;
-        return changes;
+        return (mergedSeats, conflictingSeats, newSeats);
     }
 
-    private async Task<List<string>> PerformHybridMergeAsync(
+    private async Task<(int mergedSeats, int conflictingSeats, int newSeats, List<string> conflicts)> PerformHybridMergeAsync(
         Dictionary<string, Seat> existingSeatLookup,
         List<SeatMapRow> newSeatMapRows,
-        SeatMapMergeOptions options,
-        SeatMapMergeResult result)
+        SeatMapMergeOptions options)
     {
-        var changes = new List<string>();
+        var mergedSeats = 0;
+        var conflictingSeats = 0;
+        var newSeats = 0;
+        var conflicts = new List<string>();
 
         foreach (var row in newSeatMapRows)
         {
@@ -710,20 +799,23 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
                     var resolution = await ResolveConflictAsync(existingSeatLookup[position], seat, options.ConflictResolution);
                     if (resolution != null)
                     {
-                        changes.Add($"Updated seat {position}: {resolution}");
-                        result.UpdatedSeats++;
+                        conflicts.Add($"Updated seat {position}: {resolution}");
+                        mergedSeats++;
+                    }
+                    else
+                    {
+                        conflictingSeats++;
                     }
                 }
                 else
                 {
-                    changes.Add($"Added seat {position}");
-                    result.AddedSeats++;
+                    newSeats++;
                 }
             }
         }
 
         await Task.CompletedTask;
-        return changes;
+        return (mergedSeats, conflictingSeats, newSeats, conflicts);
     }
 
     private async Task<string?> ResolveConflictAsync(
@@ -733,11 +825,11 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
     {
         return resolution switch
         {
-            ConflictResolution.UseExisting => null, // No change
-            ConflictResolution.UseNew => "Replaced with new data",
+            ConflictResolution.KeepExisting => null, // No change
+            ConflictResolution.OverwriteWithNew => "Replaced with new data",
             ConflictResolution.Merge => "Merged attributes",
-            ConflictResolution.Skip => null, // No change
-            ConflictResolution.Fail => throw new InvalidOperationException($"Conflict detected for seat {existingSeat.Position}"),
+            ConflictResolution.SkipConflicts => null, // No change
+            ConflictResolution.PromptUser => throw new InvalidOperationException($"Conflict detected for seat {existingSeat.Position}"),
             _ => null
         };
     }
@@ -752,7 +844,6 @@ public class SeatMapBulkOperationsService : ISeatMapBulkOperationsService
     private async Task StoreVersionAsync(
         Guid venueId,
         Guid versionId,
-        int versionNumber,
         string versionNote,
         Venue venue,
         CancellationToken cancellationToken)

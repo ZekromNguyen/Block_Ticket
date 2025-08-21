@@ -1,4 +1,5 @@
 using Event.Domain.Entities;
+using Event.Domain.Models;
 
 namespace Event.Domain.Interfaces;
 
@@ -27,12 +28,12 @@ public interface IRepository<T> where T : class
 /// <summary>
 /// Repository interface for Event aggregate
 /// </summary>
-public interface IEventRepository : IRepository<EventAggregate>, ICursorRepository<EventAggregate>
+public interface IEventRepository : IRepository<EventAggregate>
 {
     Task<EventAggregate?> GetBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default);
     Task<IEnumerable<EventAggregate>> GetByPromoterId(Guid promoterId, CancellationToken cancellationToken = default);
     Task<IEnumerable<EventAggregate>> GetPublishedEventsAsync(CancellationToken cancellationToken = default);
-    Task<IEnumerable<EventAggregate>> SearchEventsAsync(
+    Task<(IEnumerable<EventAggregate> Events, int TotalCount)> SearchEventsAsync(
         string? searchTerm = null,
         DateTime? startDate = null,
         DateTime? endDate = null,
@@ -47,6 +48,21 @@ public interface IEventRepository : IRepository<EventAggregate>, ICursorReposito
     Task<bool> IsSlugUniqueAsync(string slug, Guid organizationId, Guid? excludeEventId = null, CancellationToken cancellationToken = default);
     Task<int> GetTotalEventsCountAsync(Guid? promoterId = null, CancellationToken cancellationToken = default);
 
+    // Cursor-based pagination methods
+    Task<Models.CursorPagedResult<EventAggregate>> GetCursorPagedAsync<TSortKey, TSecondaryKey>(
+        Models.CursorPaginationParams pagination,
+        System.Linq.Expressions.Expression<Func<EventAggregate, bool>>? predicate,
+        System.Linq.Expressions.Expression<Func<EventAggregate, TSortKey>> sortKeySelector,
+        System.Linq.Expressions.Expression<Func<EventAggregate, TSecondaryKey>> secondaryKeySelector,
+        bool sortDescending = false,
+        bool includeTotal = false,
+        CancellationToken cancellationToken = default)
+        where TSortKey : IComparable<TSortKey>
+        where TSecondaryKey : IComparable<TSecondaryKey>;
+
+    // Slug availability check (alias for IsSlugUniqueAsync)
+    Task<bool> IsSlugAvailableAsync(string slug, Guid organizationId, Guid? excludeEventId = null, CancellationToken cancellationToken = default);
+
     // Additional methods needed by Application layer
     Task<EventAggregate?> GetWithFullDetailsAsync(Guid id, CancellationToken cancellationToken = default);
 }
@@ -59,6 +75,25 @@ public interface IVenueRepository : IRepository<Venue>
     Task<IEnumerable<Venue>> GetByLocationAsync(string city, string? state = null, string? country = null, CancellationToken cancellationToken = default);
     Task<Venue?> GetWithSeatMapAsync(Guid venueId, CancellationToken cancellationToken = default);
     Task<bool> HasActiveEventsAsync(Guid venueId, CancellationToken cancellationToken = default);
+
+    // Search and bulk retrieval methods
+    Task<(IEnumerable<Venue> Venues, int TotalCount)> SearchVenuesAsync(
+        string? searchTerm = null,
+        string? city = null,
+        string? state = null,
+        string? country = null,
+        int? minCapacity = null,
+        int? maxCapacity = null,
+        bool? hasAccessibility = null,
+        decimal? latitude = null,
+        decimal? longitude = null,
+        decimal? radiusKm = null,
+        int pageNumber = 1,
+        int pageSize = 20,
+        string? sortBy = null,
+        string? sortDirection = null,
+        CancellationToken cancellationToken = default);
+
     Task<IEnumerable<Venue>> GetByIdsAsync(IEnumerable<Guid> venueIds, CancellationToken cancellationToken = default);
 }
 
@@ -74,7 +109,7 @@ public interface IReservationRepository : IRepository<Reservation>
     Task<bool> HasActiveReservationForSeatsAsync(List<Guid> seatIds, CancellationToken cancellationToken = default);
 }
 
-
+// IPricingRuleRepository interface is defined in IPricingRuleRepository.cs
 
 /// <summary>
 /// Repository interface for EventSeries aggregate

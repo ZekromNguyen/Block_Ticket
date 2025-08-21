@@ -18,6 +18,17 @@ public record VenueDto
     public DateTime? SeatMapLastUpdated { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
+
+    // Address components (for backward compatibility)
+    public string City { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+    public string Country { get; init; } = string.Empty;
+    public string PostalCode { get; init; } = string.Empty;
+
+    // Contact aliases (for backward compatibility)
+    public string? Phone { get; init; }
+    public string? Email { get; init; }
+    public int Capacity { get; init; }
 }
 
 /// <summary>
@@ -70,35 +81,9 @@ public record CoordinatesDto
     public decimal Longitude { get; init; }
 }
 
-/// <summary>
-/// Create venue request
-/// </summary>
-public record CreateVenueRequest
-{
-    public string Name { get; init; } = string.Empty;
-    public string? Description { get; init; }
-    public AddressDto Address { get; init; } = null!;
-    public string TimeZone { get; init; } = string.Empty;
-    public int TotalCapacity { get; init; }
-    public string? ContactEmail { get; init; }
-    public string? ContactPhone { get; init; }
-    public string? Website { get; init; }
-}
+// CreateVenueRequest is defined in VenueRequestDtos.cs
 
-/// <summary>
-/// Update venue request
-/// </summary>
-public record UpdateVenueRequest
-{
-    public string? Name { get; init; }
-    public string? Description { get; init; }
-    public AddressDto? Address { get; init; }
-    public string? TimeZone { get; init; }
-    public int? TotalCapacity { get; init; }
-    public string? ContactEmail { get; init; }
-    public string? ContactPhone { get; init; }
-    public string? Website { get; init; }
-}
+// UpdateVenueRequest is defined in VenueRequestDtos.cs
 
 /// <summary>
 /// Get venues request
@@ -117,24 +102,7 @@ public record GetVenuesRequest
     public bool SortDescending { get; init; }
 }
 
-/// <summary>
-/// Search venues request
-/// </summary>
-public record SearchVenuesRequest
-{
-    public string SearchTerm { get; init; } = string.Empty;
-    public string? City { get; init; }
-    public string? State { get; init; }
-    public string? Country { get; init; }
-    public int? MinCapacity { get; init; }
-    public int? MaxCapacity { get; init; }
-    public bool? HasSeatMap { get; init; }
-    public double? Latitude { get; init; }
-    public double? Longitude { get; init; }
-    public double? RadiusKm { get; init; }
-    public int PageNumber { get; init; } = 1;
-    public int PageSize { get; init; } = 20;
-}
+// SearchVenuesRequest is defined in VenueRequestDtos.cs
 
 /// <summary>
 /// Get public venues request
@@ -161,6 +129,11 @@ public record SeatMapDto
     public string? Metadata { get; init; }
     public string? Checksum { get; init; }
     public DateTime? LastUpdated { get; init; }
+
+    // Additional properties expected by application layer
+    public List<SeatMapRowDto> SeatMapData { get; init; } = new();
+    public string Version { get; init; } = "1.0";
+    public DateTime UpdatedAt { get; init; }
 }
 
 // Duplicate ImportSeatMapRequest removed - using the more complete version below
@@ -267,39 +240,8 @@ public record SeatMapRowDto
     public string? Notes { get; init; }
 }
 
-/// <summary>
-/// Import seat map request
-/// </summary>
-public record ImportSeatMapRequest
-{
-    public List<SeatMapRowDto> SeatMapData { get; init; } = new();
-    public bool ValidateOnly { get; init; }
-    public bool ReplaceExisting { get; init; } = true;
-}
+// ImportSeatMapRequest is defined in VenueRequestDtos.cs
 
-/// <summary>
-/// Seat map import result
-/// </summary>
-public record SeatMapImportResult
-{
-    public bool Success { get; init; }
-    public int TotalRows { get; init; }
-    public int ValidRows { get; init; }
-    public int InvalidRows { get; init; }
-    public int ImportedSeats { get; init; }
-    public List<string> Errors { get; init; } = new();
-    public List<string> Warnings { get; init; } = new();
-    public string? Checksum { get; init; }
-}
+// SeatMapImportResult is defined in VenueRequestDtos.cs
 
-/// <summary>
-/// Seat map export result
-/// </summary>
-public record SeatMapExportResult
-{
-    public List<SeatMapRowDto> SeatMapData { get; init; } = new();
-    public int TotalSeats { get; init; }
-    public List<string> Sections { get; init; } = new();
-    public string? Checksum { get; init; }
-    public DateTime ExportedAt { get; init; }
-}
+// SeatMapExportResult is defined in VenueRequestDtos.cs

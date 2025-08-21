@@ -199,11 +199,6 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
 
     private static void ConfigureConstraints(EntityTypeBuilder<EventAggregate> builder)
     {
-        // Configure ETag support
-        builder.ConfigureETag();
-        builder.ConfigureOptimisticConcurrency();
-        builder.AddETagConstraints("EventAggregate");
-
         // Check constraints
         builder.HasCheckConstraint("CK_Events_EventDate_Future",
             "\"EventDate\" > \"CreatedAt\"");

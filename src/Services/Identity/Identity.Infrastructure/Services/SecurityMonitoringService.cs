@@ -300,27 +300,6 @@ public class SecurityMonitoringService : BackgroundService
             await securityService.LogSuspiciousActivityAsync(activity, cancellationToken);
 
             _logger.LogWarning("Suspicious activity detected: {ActivityType} - {Description}", activityType, description);
-
-            // Send notification for high-risk activities
-            if (riskScore >= 60)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        using var scope = _serviceProvider.CreateScope();
-                        var notificationService = scope.ServiceProvider.GetService<ISecurityNotificationService>();
-                        if (notificationService != null)
-                        {
-                            await notificationService.SendSuspiciousActivityNotificationAsync(activity, cancellationToken);
-                        }
-                    }
-                    catch (Exception notificationEx)
-                    {
-                        _logger.LogError(notificationEx, "Error sending notification for suspicious activity {ActivityType}", activityType);
-                    }
-                }, cancellationToken);
-            }
         }
         catch (Exception ex)
         {

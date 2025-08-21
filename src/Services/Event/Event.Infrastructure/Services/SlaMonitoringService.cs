@@ -1,6 +1,8 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Event.Infrastructure.Services;
 
@@ -362,13 +364,13 @@ public class SlaMonitoringService : ISlaMonitoringService
     {
         var deviationPercent = Math.Abs((actualValue - expectedValue) / expectedValue) * 100.0;
 
-        return deviationPercent switch
-        {
-            >= 50 => SeverityLevels.Critical,
-            >= 25 => SeverityLevels.High,
-            >= alertThreshold => SeverityLevels.Medium,
-            _ => SeverityLevels.Low
-        };
+        if (deviationPercent >= 50)
+            return SeverityLevels.Critical;
+        if (deviationPercent >= 25)
+            return SeverityLevels.High;
+        if (deviationPercent >= alertThreshold)
+            return SeverityLevels.Medium;
+        return SeverityLevels.Low;
     }
 
     private bool CheckCompliance(SlaDefinition sla, PerformanceSummary summary, double uptimePercentage)

@@ -1,5 +1,5 @@
 using Event.Domain.Configuration;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text.Json;
@@ -12,18 +12,15 @@ namespace Event.API.Middleware;
 public class AdvancedRateLimitMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly IRateLimitService _rateLimitService;
     private readonly RateLimitConfiguration _config;
     private readonly ILogger<AdvancedRateLimitMiddleware> _logger;
 
     public AdvancedRateLimitMiddleware(
         RequestDelegate next,
-        IRateLimitService rateLimitService,
         IOptions<RateLimitConfiguration> config,
         ILogger<AdvancedRateLimitMiddleware> logger)
     {
         _next = next;
-        _rateLimitService = rateLimitService;
         _config = config.Value;
         _logger = logger;
     }
@@ -37,11 +34,14 @@ public class AdvancedRateLimitMiddleware
             return;
         }
 
+        // Get the rate limit service from the current scope
+        var rateLimitService = context.RequestServices.GetRequiredService<IRateLimitService>();
+
         // Extract client information
         var clientInfo = ExtractClientInfo(context);
 
         // Check if client is whitelisted
-        if (await _rateLimitService.IsWhitelistedAsync(clientInfo.ClientId, clientInfo.IpAddress))
+        if (await rateLimitService.IsWhitelistedAsync(clientInfo.ClientId, clientInfo.IpAddress))
         {
             await _next(context);
             return;
@@ -50,7 +50,7 @@ public class AdvancedRateLimitMiddleware
         try
         {
             // Check rate limits
-            var rateLimitResult = await _rateLimitService.CheckRateLimitAsync(
+            var rateLimitResult = await rateLimitService.CheckRateLimitAsync(
                 clientInfo.ClientId,
                 clientInfo.IpAddress,
                 clientInfo.Endpoint,
@@ -67,7 +67,7 @@ public class AdvancedRateLimitMiddleware
                 LogRateLimitViolation(clientInfo, rateLimitResult);
 
                 // Record the blocked request
-                await _rateLimitService.RecordRequestAsync(
+                await rateLimitService.RecordRequestAsync(
                     clientInfo.ClientId,
                     clientInfo.IpAddress,
                     clientInfo.Endpoint,
@@ -82,7 +82,7 @@ public class AdvancedRateLimitMiddleware
             }
 
             // Record the allowed request
-            await _rateLimitService.RecordRequestAsync(
+            await rateLimitService.RecordRequestAsync(
                 clientInfo.ClientId,
                 clientInfo.IpAddress,
                 clientInfo.Endpoint,

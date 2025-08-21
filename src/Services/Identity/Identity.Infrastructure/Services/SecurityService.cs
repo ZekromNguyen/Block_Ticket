@@ -46,26 +46,6 @@ public class SecurityService : ISecurityService
 
             // Check if this event should trigger additional security measures
             await CheckForSecurityThresholdsAsync(securityEvent, cancellationToken);
-
-            // Send notifications for critical events asynchronously
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    if (ShouldSendNotificationForEvent(securityEvent))
-                    {
-                        // We'll inject the notification service when we set up DI
-                        // For now, just log that notification should be sent
-                        _logger.LogInformation("Security event {EventType} with severity {Severity} should trigger notification", 
-                            securityEvent.EventType, securityEvent.Severity);
-                    }
-                }
-                catch (Exception notificationEx)
-                {
-                    _logger.LogError(notificationEx, "Error sending notification for security event {EventType}", 
-                        securityEvent.EventType);
-                }
-            }, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -380,47 +360,6 @@ public class SecurityService : ISecurityService
     }
 
     // Private helper methods
-    private static bool ShouldSendNotificationForEvent(SecurityEvent securityEvent)
-    {
-        // Always notify for critical events
-        if (securityEvent.Severity == SecurityEventSeverity.Critical)
-        {
-            return true;
-        }
-
-        // Notify for high severity events of certain types
-        if (securityEvent.Severity == SecurityEventSeverity.High)
-        {
-            var notifiableHighSeverityEvents = new[]
-            {
-                SecurityEventTypes.AccountLocked,
-                SecurityEventTypes.PermissionDenied,
-                SecurityEventTypes.SuspiciousLogin,
-                SecurityEventTypes.MultipleFailedLogins,
-                SecurityEventTypes.UnusualLocation,
-                SecurityEventTypes.RateLimitExceeded
-            };
-
-            return notifiableHighSeverityEvents.Contains(securityEvent.EventType);
-        }
-
-        // Notify for specific medium severity events
-        if (securityEvent.Severity == SecurityEventSeverity.Medium)
-        {
-            var notifiableMediumSeverityEvents = new[]
-            {
-                SecurityEventTypes.PasswordChanged,
-                SecurityEventTypes.MfaEnabled,
-                SecurityEventTypes.MfaDisabled,
-                SecurityEventTypes.LoginFailure // Only if multiple failures
-            };
-
-            return notifiableMediumSeverityEvents.Contains(securityEvent.EventType);
-        }
-
-        return false;
-    }
-
     private async Task CheckForSecurityThresholdsAsync(SecurityEvent securityEvent, CancellationToken cancellationToken)
     {
         if (securityEvent.EventType == SecurityEventTypes.LoginFailure && securityEvent.UserId.HasValue)

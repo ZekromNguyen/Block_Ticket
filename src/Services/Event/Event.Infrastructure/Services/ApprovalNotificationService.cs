@@ -1,6 +1,9 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Application.Interfaces.Services;
+using Event.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Event.Infrastructure.Services;
 
@@ -9,11 +12,11 @@ namespace Event.Infrastructure.Services;
 /// </summary>
 public class ApprovalNotificationService : IApprovalNotificationService
 {
-    private readonly IEmailService _emailService;
+    private readonly Configuration.IEmailService _emailService;
     private readonly ILogger<ApprovalNotificationService> _logger;
 
     public ApprovalNotificationService(
-        IEmailService emailService,
+        Configuration.IEmailService emailService,
         ILogger<ApprovalNotificationService> logger)
     {
         _emailService = emailService;

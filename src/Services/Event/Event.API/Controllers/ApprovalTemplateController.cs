@@ -1,5 +1,5 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;

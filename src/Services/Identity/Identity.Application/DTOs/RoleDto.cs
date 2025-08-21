@@ -35,11 +35,8 @@ public record UpdateRoleDto
 
 public record PermissionDto
 {
-    public string Name { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
     public string Resource { get; init; } = string.Empty;
     public string Action { get; init; } = string.Empty;
-    public string Service { get; init; } = string.Empty;
     public string? Scope { get; init; }
     public bool IsActive { get; init; } = true;
 }

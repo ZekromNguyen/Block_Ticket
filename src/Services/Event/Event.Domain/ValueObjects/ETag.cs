@@ -97,6 +97,15 @@ public class ETag : IEquatable<ETag>
     }
 
     /// <summary>
+    /// Generates a new random ETag (used when entity type/id is not available)
+    /// </summary>
+    public static ETag Generate()
+    {
+        var value = Guid.NewGuid().ToString("N");
+        return new ETag(value, "Unknown", "Unknown");
+    }
+
+    /// <summary>
     /// Checks if this is a weak ETag
     /// </summary>
     public bool IsWeak => Value.StartsWith("W/", StringComparison.OrdinalIgnoreCase);

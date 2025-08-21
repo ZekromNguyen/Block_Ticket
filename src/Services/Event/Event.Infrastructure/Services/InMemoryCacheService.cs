@@ -1,6 +1,6 @@
 using Event.Domain.Configuration;
 using Event.Domain.Interfaces;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Collections;

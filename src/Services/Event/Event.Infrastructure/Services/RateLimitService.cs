@@ -1,5 +1,5 @@
 using Event.Domain.Configuration;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

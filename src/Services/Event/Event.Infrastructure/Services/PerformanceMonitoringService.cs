@@ -1,5 +1,6 @@
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
@@ -202,7 +203,7 @@ public class PerformanceMonitoringService : IPerformanceMonitoringService
         string? operationName = null,
         DateTime? startTime = null,
         DateTime? endTime = null,
-        int[] percentiles = null,
+        int[]? percentiles = null,
         CancellationToken cancellationToken = default)
     {
         try

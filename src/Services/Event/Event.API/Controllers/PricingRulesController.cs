@@ -1,4 +1,12 @@
 using Event.Application.Common.Models;
+using Event.Application.Features.PricingRules.Commands.CreatePricingRule;
+using Event.Application.Features.PricingRules.Commands.UpdatePricingRule;
+using Event.Application.Features.PricingRules.Commands.DeletePricingRule;
+using Event.Application.Features.PricingRules.Queries.GetEventPricingRules;
+using Event.Application.Features.PricingRules.Queries.TestPricingRule;
+using Event.Application.Features.PricingRules.Queries.GetPricingRuleUsage;
+using UpdatePricingRuleRequest = Event.Application.Features.PricingRules.Commands.UpdatePricingRule.UpdatePricingRuleRequest;
+using Event.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
@@ -42,29 +50,8 @@ public class PricingRulesController : ControllerBase
         _logger.LogInformation("Creating pricing rule: {RuleName} for event {EventId}", 
             request.Name, eventId);
 
-        // TODO: Implement CreatePricingRuleCommand
-        // var command = CreatePricingRuleCommand.FromRequest(eventId, request);
-        // var result = await _mediator.Send(command, cancellationToken);
-
-        // Placeholder implementation
-        var result = new PricingRuleDto
-        {
-            Id = Guid.NewGuid(),
-            EventId = eventId,
-            Name = request.Name,
-            Description = request.Description,
-            Type = request.Type,
-            Priority = request.Priority,
-            IsActive = request.IsActive,
-            EffectiveFrom = request.EffectiveFrom,
-            EffectiveTo = request.EffectiveTo,
-            DiscountType = request.DiscountType,
-            DiscountValue = request.DiscountValue,
-            MaxUses = request.MaxUses,
-            CurrentUses = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var command = CreatePricingRuleCommand.FromRequest(eventId, request);
+        var result = await _mediator.Send(command, cancellationToken);
 
         return CreatedAtAction(
             nameof(GetPricingRule),
@@ -114,12 +101,20 @@ public class PricingRulesController : ControllerBase
     {
         _logger.LogInformation("Getting pricing rules for event {EventId}, Type: {Type}", eventId, type);
 
-        // TODO: Implement GetEventPricingRulesQuery
-        // var query = new GetEventPricingRulesQuery(eventId, includeInactive, type);
-        // var result = await _mediator.Send(query, cancellationToken);
+        // Convert string to PricingRuleType enum
+        PricingRuleType? pricingRuleType = null;
+        if (!string.IsNullOrEmpty(type) && Enum.TryParse<PricingRuleType>(type, true, out var parsedType))
+        {
+            pricingRuleType = parsedType;
+        }
 
-        // Placeholder implementation
-        var result = new List<PricingRuleDto>();
+        var query = new GetEventPricingRulesQuery
+        {
+            EventId = eventId,
+            IncludeInactive = includeInactive,
+            Type = pricingRuleType
+        };
+        var result = await _mediator.Send(query, cancellationToken);
         return Ok(result);
     }
 
@@ -145,12 +140,13 @@ public class PricingRulesController : ControllerBase
         _logger.LogInformation("Updating pricing rule {PricingRuleId} with expected version {ExpectedVersion}", 
             pricingRuleId, expectedVersion);
 
-        // TODO: Implement UpdatePricingRuleCommand
-        // var command = UpdatePricingRuleCommand.FromRequest(pricingRuleId, request, expectedVersion);
-        // var result = await _mediator.Send(command, cancellationToken);
+        var command = UpdatePricingRuleCommand.FromRequest(pricingRuleId, request, expectedVersion);
+        var result = await _mediator.Send(command, cancellationToken);
 
-        // Placeholder implementation
-        return BadRequest("Update pricing rule not yet implemented");
+        // Set ETag header for optimistic concurrency control (simplified)
+        Response.Headers.Add("ETag", result.UpdatedAt?.Ticks.ToString() ?? DateTime.UtcNow.Ticks.ToString());
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -172,12 +168,17 @@ public class PricingRulesController : ControllerBase
     {
         _logger.LogInformation("Deleting pricing rule {PricingRuleId}", pricingRuleId);
 
-        // TODO: Implement DeletePricingRuleCommand
-        // var command = new DeletePricingRuleCommand(pricingRuleId, expectedVersion);
-        // var result = await _mediator.Send(command, cancellationToken);
+        var command = new DeletePricingRuleCommand(pricingRuleId, expectedVersion);
+        var result = await _mediator.Send(command, cancellationToken);
 
-        // Placeholder implementation
-        return BadRequest("Delete pricing rule not yet implemented");
+        if (result)
+        {
+            return NoContent();
+        }
+        else
+        {
+            return NotFound($"Pricing rule with ID '{pricingRuleId}' not found");
+        }
     }
 
     /// <summary>
@@ -246,12 +247,24 @@ public class PricingRulesController : ControllerBase
     {
         _logger.LogInformation("Testing pricing rule {PricingRuleId}", pricingRuleId);
 
-        // TODO: Implement TestPricingRuleQuery
-        // var query = new TestPricingRuleQuery(pricingRuleId, request);
-        // var result = await _mediator.Send(query, cancellationToken);
+        // Map the order items to the correct type
+        var mappedOrderItems = request.OrderItems.Select(item => new Event.Application.Features.PricingRules.Queries.TestPricingRule.TestOrderItemDto
+        {
+            TicketTypeId = item.TicketTypeId,
+            Quantity = item.Quantity,
+            UnitPrice = item.UnitPrice
+        }).ToList();
 
-        // Placeholder implementation
-        return BadRequest("Test pricing rule not yet implemented");
+        var query = new TestPricingRuleQuery
+        {
+            PricingRuleId = pricingRuleId,
+            OrderItems = mappedOrderItems,
+            CustomerSegment = request.CustomerSegment,
+            DiscountCode = request.DiscountCode
+        };
+        var result = await _mediator.Send(query, cancellationToken);
+
+        return Ok(result);
     }
 
     /// <summary>
@@ -269,12 +282,13 @@ public class PricingRulesController : ControllerBase
     {
         _logger.LogInformation("Getting usage statistics for pricing rule {PricingRuleId}", pricingRuleId);
 
-        // TODO: Implement GetPricingRuleUsageQuery
-        // var query = new GetPricingRuleUsageQuery(pricingRuleId);
-        // var result = await _mediator.Send(query, cancellationToken);
+        var query = new GetPricingRuleUsageQuery
+        {
+            PricingRuleId = pricingRuleId
+        };
+        var result = await _mediator.Send(query, cancellationToken);
 
-        // Placeholder implementation
-        return NotFound($"Usage statistics for pricing rule '{pricingRuleId}' not found");
+        return Ok(result);
     }
 }
 

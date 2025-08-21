@@ -27,7 +27,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
     private readonly UserDomainService _userDomainService;
     private readonly ITokenService _tokenService;
     private readonly IMfaService _mfaService;
-    private readonly ISessionManagementService _sessionManagementService;
     private readonly ILogger<LoginCommandHandler> _logger;
 
     public LoginCommandHandler(
@@ -37,7 +36,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
         UserDomainService userDomainService,
         ITokenService tokenService,
         IMfaService mfaService,
-        ISessionManagementService sessionManagementService,
         ILogger<LoginCommandHandler> logger)
     {
         _userRepository = userRepository;
@@ -46,7 +44,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
         _userDomainService = userDomainService;
         _tokenService = tokenService;
         _mfaService = mfaService;
-        _sessionManagementService = sessionManagementService;
         _logger = logger;
     }
 
@@ -107,19 +104,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
                 }
             }
 
-            // Check session limits before creating session
-            var canCreateSession = await _sessionManagementService.CanCreateSessionAsync(user.Id, cancellationToken);
-            if (!canCreateSession)
-            {
-                var maxAllowed = await _sessionManagementService.GetMaxAllowedSessionsAsync(user.Id, cancellationToken);
-                var currentActive = await _sessionManagementService.GetActiveSessionCountAsync(user.Id, cancellationToken);
-                
-                _logger.LogWarning("Session limit exceeded for user {Email}. Max: {MaxAllowed}, Current: {CurrentActive}", 
-                    user.Email.Value, maxAllowed, currentActive);
-
-                return Result<LoginResultDto>.Failure($"Session limit exceeded. Maximum allowed sessions: {maxAllowed}");
-            }
-
             // Create session
             var session = user.CreateSession(
                 request.DeviceInfo ?? "Unknown Device",
@@ -129,14 +113,6 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, Result<LoginRes
 
             // Save session first
             await _sessionRepository.AddAsync(session, cancellationToken);
-
-            // Enforce session limits (this might revoke old sessions)
-            var revokedSessions = await _sessionManagementService.EnforceSessionLimitsAsync(user.Id, session, cancellationToken);
-            if (revokedSessions.Any())
-            {
-                _logger.LogInformation("Revoked {Count} old sessions for user {Email} due to session limits", 
-                    revokedSessions.Count(), user.Email.Value);
-            }
 
             // Update user
             await _userRepository.UpdateAsync(user, cancellationToken);

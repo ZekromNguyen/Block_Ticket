@@ -11,7 +11,11 @@ public record EventCreatedDomainEvent(
     string EventName,
     Guid PromoterId,
     DateTime EventDate,
-    Guid VenueId) : IDomainEvent, INotification;
+    Guid VenueId) : IDomainEvent, INotification
+{
+    // Alias for backward compatibility
+    public string Title => EventName;
+}
 
 /// <summary>
 /// Domain event raised when an event is updated
@@ -28,7 +32,11 @@ public record EventPublishedDomainEvent(
     Guid EventId,
     string EventName,
     DateTime PublishedAt,
-    DateTime EventDate) : IDomainEvent, INotification;
+    DateTime EventDate) : IDomainEvent, INotification
+{
+    // Alias for backward compatibility
+    public string Title => EventName;
+}
 
 /// <summary>
 /// Domain event raised when an event is cancelled
@@ -37,7 +45,11 @@ public record EventCancelledDomainEvent(
     Guid EventId,
     string EventName,
     DateTime CancelledAt,
-    string Reason) : IDomainEvent, INotification;
+    string Reason) : IDomainEvent, INotification
+{
+    // Alias for backward compatibility
+    public string Title => EventName;
+}
 
 /// <summary>
 /// Domain event raised when an event goes on sale

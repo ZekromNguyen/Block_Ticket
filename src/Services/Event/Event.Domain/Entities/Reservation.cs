@@ -149,21 +149,29 @@ public class Reservation : BaseAuditableEntity
     {
         if (Status != ReservationStatus.Active)
             throw new ReservationDomainException("Cannot extend non-active reservations");
-        
+
         if (IsExpired())
             throw new ReservationDomainException("Cannot extend expired reservations");
 
         ExpiresAt = ExpiresAt.Add(additionalTime);
     }
 
+    /// <summary>
+    /// Alias for ExtendExpiration for backward compatibility
+    /// </summary>
+    public void ExtendExpiry(TimeSpan additionalTime)
+    {
+        ExtendExpiration(additionalTime);
+    }
+
     public void Confirm()
     {
         if (Status != ReservationStatus.Active)
             throw new ReservationDomainException("Can only confirm active reservations");
-        
+
         if (IsExpired())
             throw new ReservationDomainException("Cannot confirm expired reservations");
-        
+
         if (!_items.Any())
             throw new ReservationDomainException("Cannot confirm empty reservations");
 
@@ -176,6 +184,13 @@ public class Reservation : BaseAuditableEntity
 
         AddDomainEvent(new ReservationConfirmedDomainEvent(
             Id, EventId, UserId, seatIds, TotalAmount.Amount));
+    }
+
+    public void Confirm(string paymentReference)
+    {
+        Confirm(); // Call the parameterless version
+        // Store payment reference if needed
+        // PaymentReference = paymentReference; // Add this property if needed
     }
 
     public void Cancel(string reason)

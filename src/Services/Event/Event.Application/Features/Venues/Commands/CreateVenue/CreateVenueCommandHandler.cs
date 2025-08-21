@@ -17,17 +17,20 @@ public class CreateVenueCommandHandler : IRequestHandler<CreateVenueCommand, Ven
     private readonly ILogger<CreateVenueCommandHandler> _logger;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeProvider _dateTimeProvider;
+    private readonly IOrganizationContextProvider _organizationContextProvider;
 
     public CreateVenueCommandHandler(
         IVenueRepository venueRepository,
         ILogger<CreateVenueCommandHandler> logger,
         ICurrentUserService currentUserService,
-        IDateTimeProvider dateTimeProvider)
+        IDateTimeProvider dateTimeProvider,
+        IOrganizationContextProvider organizationContextProvider)
     {
         _venueRepository = venueRepository;
         _logger = logger;
         _currentUserService = currentUserService;
         _dateTimeProvider = dateTimeProvider;
+        _organizationContextProvider = organizationContextProvider;
     }
 
     public async Task<VenueDto> Handle(CreateVenueCommand request, CancellationToken cancellationToken)
@@ -65,7 +68,11 @@ public class CreateVenueCommandHandler : IRequestHandler<CreateVenueCommand, Ven
 
         var timeZone = new TimeZoneId(request.TimeZone);
 
+        // Get organization context
+        var organizationId = _organizationContextProvider.GetCurrentOrganizationId();
+
         var venue = new Venue(
+            organizationId,
             request.Name,
             address,
             timeZone,

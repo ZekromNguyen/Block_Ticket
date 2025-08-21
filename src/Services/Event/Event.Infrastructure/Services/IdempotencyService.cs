@@ -1,6 +1,6 @@
 using Event.Domain.Entities;
 using Event.Domain.Interfaces;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Event.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;

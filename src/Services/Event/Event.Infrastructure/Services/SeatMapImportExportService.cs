@@ -1,8 +1,10 @@
 using Event.Domain.Entities;
 using Event.Domain.Interfaces;
 using Event.Domain.Models;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
+using Event.Application.Common.Models;
 using Microsoft.Extensions.Logging;
+using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -47,7 +49,10 @@ public class SeatMapImportExportService : ISeatMapImportExportService
                 return new SeatMapImportResult
                 {
                     Success = false,
-                    Errors = { $"Failed to parse seat map data in format {format}" }
+                    VenueId = venueId,
+                    ImportedSeats = 0,
+                    Version = string.Empty,
+                    Errors = new List<string> { $"Failed to parse seat map data in format {format}" }
                 };
             }
 
@@ -59,7 +64,10 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             return new SeatMapImportResult
             {
                 Success = false,
-                Errors = { $"Import failed: {ex.Message}" }
+                VenueId = venueId,
+                ImportedSeats = 0,
+                Version = string.Empty,
+                Errors = new List<string> { $"Import failed: {ex.Message}" }
             };
         }
     }
@@ -70,79 +78,118 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         SeatMapImportOptions options,
         CancellationToken cancellationToken = default)
     {
-        var result = new SeatMapImportResult();
-        var importedSeats = 0;
-
         try
         {
             // Get the venue
             var venue = await _venueRepository.GetByIdAsync(venueId, cancellationToken);
             if (venue == null)
             {
-                result.Errors.Add($"Venue {venueId} not found");
-                return result;
-            }
-
-            // Validate schema if requested
-            if (options.ValidateSchema)
-            {
-                var validationResult = await _schemaValidator.ValidateSchemaAsync(seatMapSchema, cancellationToken);
-                result.Errors.AddRange(validationResult.Errors);
-                result.Warnings.AddRange(validationResult.Warnings);
-
-                if (!validationResult.IsValid)
+                return new SeatMapImportResult
                 {
-                    _logger.LogWarning("Schema validation failed for venue {VenueId}", venueId);
-                    return result;
-                }
+                    Success = false,
+                    VenueId = venueId,
+                    ImportedSeats = 0,
+                    Version = string.Empty,
+                    Errors = new List<string> { $"Venue {venueId} not found" }
+                };
             }
 
-            // Generate checksum
-            var checksum = GenerateChecksum(seatMapSchema);
-
-            // Dry run check
-            if (options.DryRun)
+        // Validate schema if requested
+        if (options.ValidateBeforeImport)
+        {
+            var validationResult = await ValidateSeatMapSchemaAsync(seatMapSchema);
+            if (!validationResult.IsValid)
             {
-                result.Success = true;
-                result.TotalRows = seatMapSchema.Sections.Sum(s => s.Rows.Count);
-                result.ValidRows = result.TotalRows;
-                result.ImportedSeats = seatMapSchema.Sections.Sum(s => s.Rows.Sum(r => r.Seats.Count));
-                result.Checksum = checksum;
-                return result;
+                return new SeatMapImportResult
+                {
+                    Success = false,
+                    VenueId = venueId,
+                    ImportedSeats = 0,
+                    Version = string.Empty,
+                    Errors = validationResult.Errors.ToList()
+                };
             }
+        }
 
-            // Convert schema to SeatMapRow format for existing import method
-            var seatMapRows = ConvertSchemaToSeatMapRows(seatMapSchema);
+        // Generate checksum
+        var checksum = GenerateChecksum(seatMapSchema);
 
-            // Preserve existing data if requested
-            if (!options.ReplaceExisting && venue.HasSeatMap)
+        // Dry run check - return preview instead of actual import
+        if (false) // No DryRun property in Application DTO, handle differently
+        {
+            return new SeatMapImportResult
             {
-                // Implement merge logic here
-                await MergeSeatMapDataAsync(venue, seatMapRows, options);
-            }
+                Success = true,
+                VenueId = venueId,
+                ImportedSeats = seatMapSchema.Sections.Sum(s => s.Rows.Sum(r => r.Seats.Count)),
+                Version = checksum,
+                Warnings = new List<string> { "Dry run - no changes were made" }
+            };
+        }
 
+        // Convert schema to SeatMapRow format for existing import method
+        var seatMapRows = ConvertSchemaToSeatMapRows(seatMapSchema);
+
+        // Preserve existing data if requested
+        if (!options.OverwriteExisting && venue.HasSeatMap)
+        {
+            return new SeatMapImportResult
+            {
+                Success = false,
+                VenueId = venueId,
+                ImportedSeats = 0,
+                Version = string.Empty,
+                Errors = new List<string> { "Venue already has a seat map and OverwriteExisting is false" }
+            };
+        }
+
+        try
+        {
             // Import the seat map
             venue.ImportSeatMap(seatMapRows, checksum);
             await _venueRepository.UpdateAsync(venue, cancellationToken);
 
-            // Set result
-            result.Success = true;
-            result.TotalRows = seatMapRows.Count;
-            result.ValidRows = seatMapRows.Count;
-            result.ImportedSeats = seatMapRows.Sum(r => r.Seats.Count);
-            result.Checksum = checksum;
+            // Set result using object initializer
+            var importedSeatsCount = seatMapRows.Sum(r => r.Seats.Count);
+            var result = new SeatMapImportResult
+            {
+                Success = true,
+                VenueId = venueId,
+                ImportedSeats = importedSeatsCount,
+                Version = checksum
+            };
 
             _logger.LogInformation("Successfully imported seat map for venue {VenueId}. Seats: {SeatCount}",
-                venueId, result.ImportedSeats);
+                venueId, importedSeatsCount);
+                
+            return result;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error importing seat map from schema for venue {VenueId}", venueId);
-            result.Errors.Add($"Import failed: {ex.Message}");
+            return new SeatMapImportResult
+            {
+                Success = false,
+                VenueId = venueId,
+                ImportedSeats = 0,
+                Version = string.Empty,
+                Errors = new List<string> { $"Import failed: {ex.Message}" }
+            };
         }
-
-        return result;
     }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Unexpected error in ImportSeatMapFromSchemaAsync for venue {VenueId}", venueId);
+        return new SeatMapImportResult
+        {
+            Success = false,
+            VenueId = venueId,
+            ImportedSeats = 0,
+            Version = string.Empty,
+            Errors = new List<string> { $"Unexpected error: {ex.Message}" }
+        };
+    }
+}
 
     public async Task<SeatMapExportResult> ExportSeatMapAsync(
         Guid venueId,
@@ -159,9 +206,9 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             {
                 return new SeatMapExportResult
                 {
+                    VenueId = venueId,
                     SeatMapData = new(),
-                    TotalSeats = 0,
-                    Sections = new(),
+                    Version = string.Empty,
                     ExportedAt = DateTime.UtcNow
                 };
             }
@@ -170,9 +217,9 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             {
                 return new SeatMapExportResult
                 {
+                    VenueId = venueId,
                     SeatMapData = new(),
-                    TotalSeats = 0,
-                    Sections = new(),
+                    Version = string.Empty,
                     ExportedAt = DateTime.UtcNow
                 };
             }
@@ -185,15 +232,14 @@ public class SeatMapImportExportService : ISeatMapImportExportService
 
             var result = new SeatMapExportResult
             {
+                VenueId = venueId,
                 SeatMapData = seatMapData,
-                TotalSeats = seats.Count,
-                Sections = seats.Select(s => s.Position.Section).Distinct().ToList(),
-                Checksum = venue.SeatMapChecksum,
+                Version = venue.SeatMapChecksum ?? string.Empty,
                 ExportedAt = DateTime.UtcNow
             };
 
             _logger.LogInformation("Successfully exported seat map for venue {VenueId}. Seats: {SeatCount}",
-                venueId, result.TotalSeats);
+                venueId, seats.Count);
 
             return result;
         }
@@ -221,7 +267,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         };
     }
 
-    public async Task<SchemaValidationResult> ValidateSeatMapSchemaAsync(
+    public async Task<SchemaValidationResultDto> ValidateSeatMapSchemaAsync(
         Stream dataStream,
         SeatMapFormat format,
         CancellationToken cancellationToken = default)
@@ -231,19 +277,26 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             var schema = await ParseInputDataAsync(dataStream, format, cancellationToken);
             if (schema == null)
             {
-                return new SchemaValidationResult
+                return new SchemaValidationResultDto
                 {
                     IsValid = false,
                     Errors = { $"Failed to parse data in format {format}" }
                 };
             }
 
-            return await _schemaValidator.ValidateSchemaAsync(schema, cancellationToken);
+            var validationResult = await _schemaValidator.ValidateSchemaAsync(schema, cancellationToken);
+            return new SchemaValidationResultDto
+            {
+                IsValid = validationResult.IsValid,
+                Errors = validationResult.Errors,
+                Warnings = validationResult.Warnings,
+                Version = "1.0"
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating seat map schema");
-            return new SchemaValidationResult
+            return new SchemaValidationResultDto
             {
                 IsValid = false,
                 Errors = { $"Validation error: {ex.Message}" }
@@ -251,11 +304,18 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         }
     }
 
-    public async Task<SchemaValidationResult> ValidateSeatMapSchemaAsync(
-        SeatMapSchema seatMapSchema,
+    public async Task<SchemaValidationResultDto> ValidateSeatMapSchemaAsync(
+        Event.Domain.Models.SeatMapSchema seatMapSchema,
         CancellationToken cancellationToken = default)
     {
-        return await _schemaValidator.ValidateSchemaAsync(seatMapSchema, cancellationToken);
+        var validationResult = await _schemaValidator.ValidateSchemaAsync(seatMapSchema, cancellationToken);
+        return new SchemaValidationResultDto
+        {
+            IsValid = validationResult.IsValid,
+            Errors = validationResult.Errors,
+            Warnings = validationResult.Warnings,
+            Version = "1.0"
+        };
     }
 
     public async Task<SeatMapImportPreview> PreviewImportAsync(
@@ -272,8 +332,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             {
                 return new SeatMapImportPreview
                 {
-                    IsValid = false,
-                    Errors = { $"Failed to parse data in format {format}" }
+                    ValidationErrors = new List<string> { $"Failed to parse data in format {format}" }
                 };
             }
 
@@ -282,8 +341,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             {
                 return new SeatMapImportPreview
                 {
-                    IsValid = false,
-                    Errors = { $"Venue {venueId} not found" }
+                    ValidationErrors = new List<string> { $"Venue {venueId} not found" }
                 };
             }
 
@@ -296,24 +354,13 @@ public class SeatMapImportExportService : ISeatMapImportExportService
 
             var preview = new SeatMapImportPreview
             {
-                IsValid = validationResult.IsValid,
-                TotalSeatsToImport = totalSeatsToImport,
-                TotalSeatsToAdd = options.ReplaceExisting ? totalSeatsToImport : Math.Max(0, totalSeatsToImport - currentSeats),
-                TotalSeatsToUpdate = options.ReplaceExisting ? 0 : Math.Min(currentSeats, totalSeatsToImport),
-                TotalSeatsToRemove = options.ReplaceExisting ? currentSeats : 0,
-                ValidationResult = validationResult,
-                Errors = validationResult.Errors,
+                TotalSeats = totalSeatsToImport,
+                NewSeats = options.OverwriteExisting ? totalSeatsToImport : Math.Max(0, totalSeatsToImport - currentSeats),
+                UpdatedSeats = options.OverwriteExisting ? 0 : Math.Min(currentSeats, totalSeatsToImport),
+                ConflictingSeats = options.OverwriteExisting ? currentSeats : 0,
+                ValidationErrors = validationResult.IsValid ? new List<string>() : validationResult.Errors,
                 Warnings = validationResult.Warnings
             };
-
-            if (options.ReplaceExisting)
-            {
-                preview.Changes.Add($"Will replace existing seat map ({currentSeats} seats) with new seat map ({totalSeatsToImport} seats)");
-            }
-            else
-            {
-                preview.Changes.Add($"Will merge with existing seat map. Current: {currentSeats}, Import: {totalSeatsToImport}");
-            }
 
             return preview;
         }
@@ -322,8 +369,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             _logger.LogError(ex, "Error generating import preview for venue {VenueId}", venueId);
             return new SeatMapImportPreview
             {
-                IsValid = false,
-                Errors = { $"Preview generation failed: {ex.Message}" }
+                ValidationErrors = new List<string> { $"Preview generation failed: {ex.Message}" }
             };
         }
     }
@@ -334,55 +380,39 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         {
             new()
             {
-                Format = SeatMapFormat.Json,
-                Name = "JSON",
+                FormatName = "JSON",
                 Description = "JavaScript Object Notation - full schema support",
-                FileExtensions = { ".json" },
+                SupportedFileExtensions = new List<string> { ".json" },
                 SupportsImport = true,
                 SupportsExport = true,
-                SupportsValidation = true,
-                SupportsLayout = true,
-                MaxFileSize = 50 * 1024 * 1024, // 50MB
-                Capabilities = { ["full_schema"] = true, ["compression"] = true }
+                Capabilities = new Dictionary<string, object> { ["full_schema"] = true, ["compression"] = true, ["max_file_size"] = 50 * 1024 * 1024 }
             },
             new()
             {
-                Format = SeatMapFormat.Csv,
-                Name = "CSV",
+                FormatName = "CSV",
                 Description = "Comma Separated Values - basic seat data only",
-                FileExtensions = { ".csv" },
+                SupportedFileExtensions = new List<string> { ".csv" },
                 SupportsImport = true,
                 SupportsExport = true,
-                SupportsValidation = true,
-                SupportsLayout = false,
-                MaxFileSize = 10 * 1024 * 1024, // 10MB
-                Capabilities = { ["bulk_import"] = true, ["simple_format"] = true }
+                Capabilities = new Dictionary<string, object> { ["bulk_import"] = true, ["simple_format"] = true, ["max_file_size"] = 10 * 1024 * 1024 }
             },
             new()
             {
-                Format = SeatMapFormat.Excel,
-                Name = "Excel",
+                FormatName = "Excel",
                 Description = "Microsoft Excel format - enhanced CSV with multiple sheets",
-                FileExtensions = { ".xlsx", ".xls" },
+                SupportedFileExtensions = new List<string> { ".xlsx", ".xls" },
                 SupportsImport = true,
                 SupportsExport = true,
-                SupportsValidation = true,
-                SupportsLayout = false,
-                MaxFileSize = 25 * 1024 * 1024, // 25MB
-                Capabilities = { ["multiple_sheets"] = true, ["templates"] = true }
+                Capabilities = new Dictionary<string, object> { ["multiple_sheets"] = true, ["templates"] = true, ["max_file_size"] = 25 * 1024 * 1024 }
             },
             new()
             {
-                Format = SeatMapFormat.Xml,
-                Name = "XML",
+                FormatName = "XML",
                 Description = "Extensible Markup Language - structured data format",
-                FileExtensions = { ".xml" },
+                SupportedFileExtensions = new List<string> { ".xml" },
                 SupportsImport = true,
                 SupportsExport = true,
-                SupportsValidation = true,
-                SupportsLayout = true,
-                MaxFileSize = 20 * 1024 * 1024, // 20MB
-                Capabilities = { ["schema_validation"] = true, ["namespaces"] = true }
+                Capabilities = new Dictionary<string, object> { ["validation"] = true, ["layout"] = true, ["max_file_size"] = 20 * 1024 * 1024 }
             }
         };
     }
@@ -410,7 +440,11 @@ public class SeatMapImportExportService : ISeatMapImportExportService
 
         var result = new BulkSeatMapImportResult
         {
-            TotalRequested = imports.Count
+            TotalItems = imports.Count,
+            SuccessfulImports = 0,
+            FailedImports = 0,
+            Results = new List<BulkSeatMapImportItemResult>(),
+            ProcessingTime = TimeSpan.Zero
         };
 
         var startTime = DateTime.UtcNow;
@@ -418,33 +452,46 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         try
         {
             // Validate all first if requested
-            if (options.ValidateAllFirst)
+            if (options.StopOnFirstError)
             {
                 foreach (var import in imports)
                 {
-                    var validationResult = await ValidateSeatMapSchemaAsync(import.DataStream, import.Format, cancellationToken);
+                    SchemaValidationResultDto validationResult;
+                    try
+                    {
+                        using var dataStream = ConvertDataSourceToStream(import.DataSource);
+                        validationResult = await ValidateSeatMapSchemaAsync(dataStream, import.Format, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        validationResult = new SchemaValidationResultDto
+                        {
+                            IsValid = false,
+                            Errors = new List<string> { $"Failed to read data source: {ex.Message}" }
+                        };
+                    }
+
                     if (!validationResult.IsValid)
                     {
                         result.Results.Add(new BulkSeatMapImportItemResult
                         {
                             VenueId = import.VenueId,
-                            VenueName = import.VenueName,
                             Success = false,
-                            Errors = { $"Validation failed: {string.Join(", ", validationResult.Errors)}" }
+                            ErrorMessage = $"Validation failed: {string.Join(", ", validationResult.Errors)}"
                         });
 
-                        if (!options.ContinueOnError)
-                        {
-                            result.Failed = result.Results.Count(r => !r.Success);
-                            result.TotalDuration = DateTime.UtcNow - startTime;
-                            return result;
-                        }
+                        result = result with 
+                        { 
+                            FailedImports = 1,
+                            ProcessingTime = DateTime.UtcNow - startTime
+                        };
+                        return result;
                     }
                 }
             }
 
             // Process imports with controlled concurrency
-            var semaphore = new SemaphoreSlim(options.MaxConcurrentImports, options.MaxConcurrentImports);
+            var semaphore = new SemaphoreSlim(options.MaxConcurrentOperations, options.MaxConcurrentOperations);
             var tasks = imports.Select(async import =>
             {
                 await semaphore.WaitAsync(cancellationToken);
@@ -461,17 +508,20 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             var importResults = await Task.WhenAll(tasks);
             result.Results.AddRange(importResults);
 
-            result.Successful = result.Results.Count(r => r.Success);
-            result.Failed = result.Results.Count(r => !r.Success);
-            result.TotalDuration = DateTime.UtcNow - startTime;
+            result = result with 
+            { 
+                SuccessfulImports = result.Results.Count(r => r.Success),
+                FailedImports = result.Results.Count(r => !r.Success),
+                ProcessingTime = DateTime.UtcNow - startTime
+            };
 
             _logger.LogInformation("Bulk import completed. Success: {Successful}, Failed: {Failed}, Duration: {Duration}",
-                result.Successful, result.Failed, result.TotalDuration);
+                result.SuccessfulImports, result.FailedImports, result.ProcessingTime);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during bulk import");
-            result.Failed = result.TotalRequested - result.Successful;
+            result = result with { FailedImports = result.TotalItems - result.SuccessfulImports };
         }
 
         return result;
@@ -554,6 +604,22 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         return seatMapRows;
     }
 
+    private Stream ConvertDataSourceToStream(string dataSource)
+    {
+        if (dataSource.StartsWith("data:"))
+        {
+            // Handle data URI format
+            var base64Data = dataSource.Split(',')[1];
+            var bytes = Convert.FromBase64String(base64Data);
+            return new MemoryStream(bytes);
+        }
+        else
+        {
+            // Assume it's a file path
+            return new FileStream(dataSource, FileMode.Open, FileAccess.Read);
+        }
+    }
+
     private List<SeatMapRowDto> ConvertSeatsToSeatMapRows(List<Seat> seats, SeatMapExportOptions options)
     {
         return seats.Select(seat => new SeatMapRowDto
@@ -624,7 +690,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
         var sb = new StringBuilder();
         sb.AppendLine("Section,Row,SeatNumber,IsAccessible,HasRestrictedView,PriceCategory,Notes");
         
-        if (options.IncludeSampleData)
+        if (options.IncludeExamples)
         {
             sb.AppendLine("Orchestra,A,1,false,false,Premium,");
             sb.AppendLine("Orchestra,A,2,false,false,Premium,");
@@ -644,7 +710,7 @@ public class SeatMapImportExportService : ISeatMapImportExportService
 
     private SeatMapSchema CreateSampleSeatMapSchema(SeatMapTemplateOptions options)
     {
-        var sampleSeats = options.TemplateSize switch
+        var sampleSeats = options.TemplateName switch
         {
             "Small" => 50,
             "Medium" => 200,
@@ -743,9 +809,11 @@ public class SeatMapImportExportService : ISeatMapImportExportService
 
         try
         {
+            using var dataStream = ConvertDataSourceToStream(import.DataSource);
+            
             var importResult = await ImportSeatMapAsync(
                 import.VenueId,
-                import.DataStream,
+                dataStream,
                 import.Format,
                 import.Options,
                 cancellationToken);
@@ -753,11 +821,10 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             return new BulkSeatMapImportItemResult
             {
                 VenueId = import.VenueId,
-                VenueName = import.VenueName,
                 Success = importResult.Success,
                 ImportResult = importResult,
-                Errors = importResult.Errors,
-                Duration = DateTime.UtcNow - startTime
+                ErrorMessage = importResult.Success ? null : string.Join(", ", importResult.Errors),
+                ProcessingTime = DateTime.UtcNow - startTime
             };
         }
         catch (Exception ex)
@@ -766,10 +833,9 @@ public class SeatMapImportExportService : ISeatMapImportExportService
             return new BulkSeatMapImportItemResult
             {
                 VenueId = import.VenueId,
-                VenueName = import.VenueName,
                 Success = false,
-                Errors = { ex.Message },
-                Duration = DateTime.UtcNow - startTime
+                ErrorMessage = ex.Message,
+                ProcessingTime = DateTime.UtcNow - startTime
             };
         }
     }

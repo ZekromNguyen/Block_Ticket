@@ -1,5 +1,5 @@
 using Event.Domain.Configuration;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
@@ -262,7 +262,7 @@ public class AdvancedRedisCacheService : IAdvancedCacheService
 
         try
         {
-            var prefixedKeys = keyList.Select(GetPrefixedKey).ToArray();
+            var prefixedKeys = keyList.Select(GetPrefixedKey).Select(k => (RedisKey)k).ToArray();
             var values = await _database.StringGetAsync(prefixedKeys);
 
             for (int i = 0; i < keyList.Count; i++)
@@ -348,7 +348,8 @@ public class AdvancedRedisCacheService : IAdvancedCacheService
 
             if (allKeys.Any())
             {
-                await _database.KeyDeleteAsync(allKeys.ToArray());
+                var keyArray = allKeys.Select(k => (RedisKey)k.ToString()).ToArray();
+                await _database.KeyDeleteAsync(keyArray);
                 _logger.LogDebug("Removed {Count} cache keys by tags: {Tags}", 
                     allKeys.Count, string.Join(", ", tags));
             }
@@ -447,16 +448,30 @@ public class AdvancedRedisCacheService : IAdvancedCacheService
         try
         {
             var server = _connectionMultiplexer.GetServer(_connectionMultiplexer.GetEndPoints().First());
-            var info = await server.InfoAsync("memory");
+            var infoResult = await server.InfoAsync("memory");
             
             var totalKeys = await _database.ExecuteAsync("DBSIZE");
-            var memoryUsage = ExtractMemoryUsage(info);
+            var totalKeysLong = (long)totalKeys;
+            
+            // Process Redis INFO result properly
+            var memoryUsage = 0L;
+            foreach (var section in infoResult)
+            {
+                foreach (var kvp in section)
+                {
+                    if (kvp.Key == "used_memory" && long.TryParse(kvp.Value, out var mem))
+                    {
+                        memoryUsage = mem;
+                        break;
+                    }
+                }
+            }
 
             return new CacheSizeInfo
             {
-                TotalKeys = totalKeys,
+                TotalKeys = totalKeysLong,
                 TotalMemoryUsage = memoryUsage,
-                AverageKeySize = totalKeys > 0 ? memoryUsage / totalKeys : 0
+                AverageKeySize = totalKeysLong > 0 ? memoryUsage / totalKeysLong : 0
             };
         }
         catch (Exception ex)
@@ -704,20 +719,20 @@ public class AdvancedRedisCacheService : IAdvancedCacheService
         switch (operation.ToLowerInvariant())
         {
             case "hit":
-                Interlocked.Increment(ref metrics.HitCount);
+                metrics.HitCount++;
                 break;
             case "miss":
-                Interlocked.Increment(ref metrics.MissCount);
+                metrics.MissCount++;
                 break;
             case "set":
             case "batch_set":
-                Interlocked.Increment(ref metrics.SetCount);
+                metrics.SetCount++;
                 break;
             case "remove":
-                Interlocked.Increment(ref metrics.RemoveCount);
+                metrics.RemoveCount++;
                 break;
             case "error":
-                Interlocked.Increment(ref metrics.ErrorCount);
+                metrics.ErrorCount++;
                 break;
         }
 

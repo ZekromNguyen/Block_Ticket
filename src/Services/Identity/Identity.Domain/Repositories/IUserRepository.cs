@@ -9,7 +9,6 @@ public interface IUserRepository
     Task<User?> GetByEmailAsync(Email email, CancellationToken cancellationToken = default);
     Task<User?> GetByWalletAddressAsync(WalletAddress walletAddress, CancellationToken cancellationToken = default);
     Task<IEnumerable<User>> GetByUserTypeAsync(UserType userType, CancellationToken cancellationToken = default);
-    Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(Email email, CancellationToken cancellationToken = default);
     Task<bool> ExistsAsync(WalletAddress walletAddress, CancellationToken cancellationToken = default);
     Task AddAsync(User user, CancellationToken cancellationToken = default);

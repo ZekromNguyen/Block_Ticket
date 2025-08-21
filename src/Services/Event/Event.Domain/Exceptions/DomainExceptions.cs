@@ -163,3 +163,21 @@ public class InvalidDiscountCodeException : DomainException
         DiscountCode = discountCode;
     }
 }
+
+/// <summary>
+/// Exception thrown when a concurrency conflict occurs (optimistic concurrency control)
+/// </summary>
+public class ConcurrencyException : DomainException
+{
+    public int ExpectedVersion { get; }
+    public int ActualVersion { get; }
+
+    public ConcurrencyException(string message) : base(message) { }
+
+    public ConcurrencyException(int expectedVersion, int actualVersion)
+        : base($"Concurrency conflict: Expected version {expectedVersion}, but current version is {actualVersion}")
+    {
+        ExpectedVersion = expectedVersion;
+        ActualVersion = actualVersion;
+    }
+}

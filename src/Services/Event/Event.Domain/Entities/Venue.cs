@@ -13,22 +13,38 @@ public class Venue : BaseAuditableEntity
     private readonly List<Seat> _seats = new();
 
     // Basic Properties
+    public Guid OrganizationId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
     public Address Address { get; private set; } = null!;
     public TimeZoneId TimeZone { get; private set; } = null!;
     public int TotalCapacity { get; private set; }
-    
+
+    // Address Components (for backward compatibility with application layer)
+    public string City => Address?.City ?? string.Empty;
+    public string State => Address?.State ?? string.Empty;
+    public string Country => Address?.Country ?? string.Empty;
+    public string PostalCode => Address?.PostalCode ?? string.Empty;
+
     // Contact Information
     public string? ContactEmail { get; private set; }
     public string? ContactPhone { get; private set; }
     public string? Website { get; private set; }
+
+    // Additional contact properties (for backward compatibility)
+    public string? Phone => ContactPhone;
+    public string? Email => ContactEmail;
+    public int Capacity => TotalCapacity;
     
     // Seat Map
     public bool HasSeatMap { get; private set; }
     public string? SeatMapMetadata { get; private set; } // JSON
     public string? SeatMapChecksum { get; private set; }
     public DateTime? SeatMapLastUpdated { get; private set; }
+
+    // Additional seat map properties (for backward compatibility)
+    public string? SeatMap => SeatMapMetadata; // Alias for SeatMapMetadata
+    public string? SeatMapVersion { get; private set; } = "1.0";
     
     // Navigation Properties
     public IReadOnlyCollection<Seat> Seats => _seats.AsReadOnly();
@@ -37,18 +53,23 @@ public class Venue : BaseAuditableEntity
     private Venue() { }
 
     public Venue(
+        Guid organizationId,
         string name,
         Address address,
         TimeZoneId timeZone,
         int totalCapacity,
         string? description = null)
     {
+        if (organizationId == Guid.Empty)
+            throw new VenueDomainException("Organization ID cannot be empty");
+
         if (string.IsNullOrWhiteSpace(name))
             throw new VenueDomainException("Venue name cannot be empty");
-        
+
         if (totalCapacity <= 0)
             throw new VenueDomainException("Venue capacity must be greater than zero");
 
+        OrganizationId = organizationId;
         Name = name.Trim();
         Description = description?.Trim();
         Address = address;

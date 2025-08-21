@@ -158,7 +158,7 @@ public class ApprovalWorkflowConfiguration : IEntityTypeConfiguration<ApprovalWo
         // Performance indexes
         builder.HasIndex(w => w.ExpiresAt)
             .HasDatabaseName("IX_ApprovalWorkflows_ExpiresAt")
-            .HasFilter("status = 'Pending'");
+            .HasFilter("\"Status\" = 'Pending'");
 
         builder.HasIndex(w => w.CreatedAt)
             .HasDatabaseName("IX_ApprovalWorkflows_CreatedAt");

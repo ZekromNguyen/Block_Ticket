@@ -192,13 +192,13 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
     {
         try
         {
-            // Map UserType to role name
+            // Map UserType to role name (match the exact case from seed data)
             string roleName = userType switch
             {
                 UserType.Fan => "Fan",
                 UserType.Promoter => "Promoter",
-                UserType.Admin => "Admin",
-                _ => "fan" // Default to fan role
+                UserType.Admin => "SuperAdmin", // Map Admin to SuperAdmin role
+                _ => "Fan" // Default to Fan role
             };
 
             // Find the role by name

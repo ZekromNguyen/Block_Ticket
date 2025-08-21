@@ -42,7 +42,10 @@ public class PricingRule : BaseAuditableEntity
     // Target Constraints
     public List<Guid>? TargetTicketTypeIds { get; private set; }
     public List<string>? TargetCustomerSegments { get; private set; }
-    
+
+    // Versioning (for optimistic concurrency control)
+    public int Version { get; private set; } = 1;
+
     // Navigation Properties
     public EventAggregate Event { get; private set; } = null!;
 
@@ -107,6 +110,41 @@ public class PricingRule : BaseAuditableEntity
         }
     }
 
+    public void SetDescription(string? description)
+    {
+        if (Description != description?.Trim())
+        {
+            Description = description?.Trim();
+            AddDomainEvent(new PricingRuleUpdatedDomainEvent(Id, EventId,
+                new Dictionary<string, object> { ["Description"] = new { Old = Description, New = description?.Trim() } }));
+        }
+    }
+
+    public void UpdateEffectiveDates(DateTime effectiveFrom, DateTime? effectiveTo)
+    {
+        if (effectiveTo.HasValue && effectiveTo.Value <= effectiveFrom)
+            throw new PricingDomainException("Effective end date must be after start date");
+
+        var changes = new Dictionary<string, object>();
+
+        if (EffectiveFrom != effectiveFrom)
+        {
+            changes["EffectiveFrom"] = new { Old = EffectiveFrom, New = effectiveFrom };
+            EffectiveFrom = effectiveFrom;
+        }
+
+        if (EffectiveTo != effectiveTo)
+        {
+            changes["EffectiveTo"] = new { Old = EffectiveTo, New = effectiveTo };
+            EffectiveTo = effectiveTo;
+        }
+
+        if (changes.Any())
+        {
+            AddDomainEvent(new PricingRuleUpdatedDomainEvent(Id, EventId, changes));
+        }
+    }
+
     public void SetDiscountConfiguration(
         DiscountType discountType,
         decimal discountValue,
@@ -156,22 +194,26 @@ public class PricingRule : BaseAuditableEntity
     public void SetTargetTicketTypes(List<Guid> ticketTypeIds)
     {
         TargetTicketTypeIds = ticketTypeIds?.Any() == true ? ticketTypeIds : null;
+        Version++;
     }
 
     public void SetTargetCustomerSegments(List<string> segments)
     {
-        TargetCustomerSegments = segments?.Any() == true ? 
+        TargetCustomerSegments = segments?.Any() == true ?
             segments.Select(s => s.Trim().ToLowerInvariant()).ToList() : null;
+        Version++;
     }
 
     public void Activate()
     {
         IsActive = true;
+        Version++;
     }
 
     public void Deactivate()
     {
         IsActive = false;
+        Version++;
     }
 
     public void IncrementUsage()
@@ -180,6 +222,7 @@ public class PricingRule : BaseAuditableEntity
             throw new PricingDomainException("Pricing rule cannot be used");
 
         CurrentUses++;
+        Version++;
     }
 
     public bool IsEffectiveNow()

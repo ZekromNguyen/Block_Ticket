@@ -11,10 +11,10 @@ namespace Event.Infrastructure.Persistence.Configurations;
 public static class ETagConfigurationExtensions
 {
     /// <summary>
-    /// Configures ETag properties for an entity that implements IETaggable
+    /// Configures ETag properties for an entity that extends ETaggableEntity
     /// </summary>
     public static void ConfigureETag<T>(this EntityTypeBuilder<T> builder) 
-        where T : class, IETaggable
+        where T : ETaggableEntity
     {
         // Configure ETag value storage
         builder.Property(e => e.ETagValue)
@@ -44,7 +44,7 @@ public static class ETagConfigurationExtensions
     /// Configures optimistic concurrency using ETag as a concurrency token
     /// </summary>
     public static void ConfigureOptimisticConcurrency<T>(this EntityTypeBuilder<T> builder) 
-        where T : class, IETaggable
+        where T : ETaggableEntity
     {
         // Use ETag as concurrency token for optimistic locking
         builder.Property(e => e.ETagValue)
@@ -61,7 +61,7 @@ public static class ETagConfigurationExtensions
     /// Adds check constraints for ETag validation
     /// </summary>
     public static void AddETagConstraints<T>(this EntityTypeBuilder<T> builder, string tableName) 
-        where T : class, IETaggable
+        where T : ETaggableEntity
     {
         // Ensure ETag value is not empty
         builder.ToTable(t => t.HasCheckConstraint(

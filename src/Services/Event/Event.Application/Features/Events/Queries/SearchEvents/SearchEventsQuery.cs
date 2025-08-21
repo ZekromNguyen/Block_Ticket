@@ -42,7 +42,7 @@ public record SearchEventsQuery : IRequest<PagedResult<EventCatalogDto>>
             PageNumber = request.PageNumber,
             PageSize = request.PageSize,
             SortBy = request.SortBy,
-            SortDescending = request.SortDescending
+            SortDescending = request.SortDescending ?? false
         };
     }
 }
@@ -68,18 +68,25 @@ public record GetEventsQuery : IRequest<PagedResult<EventDto>>
     /// </summary>
     public static GetEventsQuery FromRequest(GetEventsRequest request)
     {
+        // Convert string status to enum
+        EventStatus? status = null;
+        if (!string.IsNullOrEmpty(request.Status) && Enum.TryParse<EventStatus>(request.Status, true, out var parsedStatus))
+        {
+            status = parsedStatus;
+        }
+
         return new GetEventsQuery
         {
             PromoterId = request.PromoterId,
             VenueId = request.VenueId,
-            Status = request.Status,
+            Status = status,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             Categories = request.Categories,
             PageNumber = request.PageNumber,
             PageSize = request.PageSize,
             SortBy = request.SortBy,
-            SortDescending = request.SortDescending
+            SortDescending = request.SortDescending ?? false
         };
     }
 }

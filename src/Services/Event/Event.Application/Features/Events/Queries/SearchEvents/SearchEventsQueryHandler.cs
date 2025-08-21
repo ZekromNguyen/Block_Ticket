@@ -65,11 +65,11 @@ public class SearchEventsQueryHandler : IRequestHandler<SearchEventsQuery, Paged
         var totalCount = await GetTotalSearchCount(request, cancellationToken);
 
         // Get venue information for the events
-        var venueIds = events.Select(e => e.VenueId).Distinct().ToList();
+        var venueIds = events.Events.Select(e => e.VenueId).Distinct().ToList();
         var venues = await GetVenuesSummary(venueIds, cancellationToken);
 
         // Convert to catalog DTOs
-        var catalogDtos = events.Select(e => MapToCatalogDto(e, venues)).ToList();
+        var catalogDtos = events.Events.Select(e => MapToCatalogDto(e, venues)).ToList();
 
         // Apply sorting if needed
         catalogDtos = ApplySorting(catalogDtos, request.SortBy, request.SortDescending);
@@ -106,7 +106,7 @@ public class SearchEventsQueryHandler : IRequestHandler<SearchEventsQuery, Paged
             take: int.MaxValue,
             cancellationToken: cancellationToken);
 
-        return allEvents.Count();
+        return allEvents.TotalCount;
     }
 
     private async Task<Dictionary<Guid, VenueSummaryDto>> GetVenuesSummary(List<Guid> venueIds, CancellationToken cancellationToken)

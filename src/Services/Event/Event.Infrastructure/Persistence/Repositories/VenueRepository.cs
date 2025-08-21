@@ -174,4 +174,102 @@ public class VenueRepository : BaseRepository<Venue>, IVenueRepository
     {
         return degrees * Math.PI / 180;
     }
+
+    public async Task<(IEnumerable<Venue> Venues, int TotalCount)> SearchVenuesAsync(
+        string? searchTerm = null,
+        string? city = null,
+        string? state = null,
+        string? country = null,
+        int? minCapacity = null,
+        int? maxCapacity = null,
+        bool? hasAccessibility = null,
+        decimal? latitude = null,
+        decimal? longitude = null,
+        decimal? radiusKm = null,
+        int pageNumber = 1,
+        int pageSize = 20,
+        string? sortBy = null,
+        string? sortDirection = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = DbSet.AsQueryable();
+
+        // Text search
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            query = query.Where(v => v.Name.Contains(searchTerm) ||
+                                   (v.Description != null && v.Description.Contains(searchTerm)));
+        }
+
+        // Location filters
+        if (!string.IsNullOrWhiteSpace(city))
+        {
+            query = query.Where(v => v.Address.City.ToLower() == city.ToLower());
+        }
+
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            query = query.Where(v => v.Address.State.ToLower() == state.ToLower());
+        }
+
+        if (!string.IsNullOrWhiteSpace(country))
+        {
+            query = query.Where(v => v.Address.Country.ToLower() == country.ToLower());
+        }
+
+        // Capacity filters
+        if (minCapacity.HasValue)
+        {
+            query = query.Where(v => v.TotalCapacity >= minCapacity.Value);
+        }
+
+        if (maxCapacity.HasValue)
+        {
+            query = query.Where(v => v.TotalCapacity <= maxCapacity.Value);
+        }
+
+        // Geographic radius filter
+        if (latitude.HasValue && longitude.HasValue && radiusKm.HasValue)
+        {
+            // This would require a more sophisticated implementation with spatial queries
+            // For now, we'll skip this filter
+        }
+
+        // Get total count before pagination
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        // Apply sorting
+        if (!string.IsNullOrWhiteSpace(sortBy))
+        {
+            var isDescending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+
+            query = sortBy.ToLower() switch
+            {
+                "name" => isDescending ? query.OrderByDescending(v => v.Name) : query.OrderBy(v => v.Name),
+                "capacity" => isDescending ? query.OrderByDescending(v => v.TotalCapacity) : query.OrderBy(v => v.TotalCapacity),
+                "city" => isDescending ? query.OrderByDescending(v => v.Address.City) : query.OrderBy(v => v.Address.City),
+                _ => query.OrderBy(v => v.Name)
+            };
+        }
+        else
+        {
+            query = query.OrderBy(v => v.Name);
+        }
+
+        // Apply pagination
+        var skip = (pageNumber - 1) * pageSize;
+        var venues = await query
+            .Skip(skip)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (venues, totalCount);
+    }
+
+    public async Task<IEnumerable<Venue>> GetByIdsAsync(IEnumerable<Guid> venueIds, CancellationToken cancellationToken = default)
+    {
+        return await DbSet
+            .Where(v => venueIds.Contains(v.Id))
+            .ToListAsync(cancellationToken);
+    }
 }

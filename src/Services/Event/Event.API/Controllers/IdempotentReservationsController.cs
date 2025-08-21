@@ -1,5 +1,5 @@
 using Event.API.Attributes;
-using Event.Domain.Services;
+using Event.Application.Interfaces.Infrastructure;
 using Event.Application.Common.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;

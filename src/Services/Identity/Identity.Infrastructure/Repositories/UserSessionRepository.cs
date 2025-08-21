@@ -130,40 +130,4 @@ public class UserSessionRepository : IUserSessionRepository
             throw;
         }
     }
-
-    public async Task<int> GetActiveSessionCountAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return await _context.UserSessions
-                .Where(s => s.UserId == userId && 
-                           s.EndedAt == null && 
-                           s.ExpiresAt > DateTime.UtcNow)
-                .CountAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting active session count for user {UserId}", userId);
-            throw;
-        }
-    }
-
-    public async Task<IEnumerable<UserSession>> GetOldestActiveSessionsAsync(Guid userId, int count, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return await _context.UserSessions
-                .Where(s => s.UserId == userId && 
-                           s.EndedAt == null && 
-                           s.ExpiresAt > DateTime.UtcNow)
-                .OrderBy(s => s.CreatedAt)
-                .Take(count)
-                .ToListAsync(cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting oldest active sessions for user {UserId}", userId);
-            throw;
-        }
-    }
 }
