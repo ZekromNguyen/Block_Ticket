@@ -23,7 +23,7 @@ variables:
   namespace: 'blockticket'
 
 pool:
-  name: 'blockticket'
+  vmImage: 'ubuntu-latest'
 
 stages:
 # ============================================================================
