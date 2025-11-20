@@ -373,7 +373,7 @@ Thumbs.db
 
 # Docker
 .dockerignore
-Dockerfile
+# Dockerfile  # Commented out - we need Dockerfiles in the repository for CI/CD
 docker-compose.override.yml
 
 # Logs
