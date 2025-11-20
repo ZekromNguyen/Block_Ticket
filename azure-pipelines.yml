@@ -1,0 +1,248 @@
+# Docker - Multi-Service Build and Deploy Pipeline for Kubernetes
+# Build images, push to Azure Container Registry, and deploy to Kubernetes cluster
+
+trigger:
+  paths:
+    include:
+      - src/Services/**
+      - src/Shared/**
+      - src/ApiGateway/**
+      - k8s/services/**
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  dockerRegistryServiceConnection: 'f0bba39a-badd-44e3-a3d7-b1142b99c980'
+  containerRegistry: 'blockticket.azurecr.io'
+  tag: '$(Build.BuildId)'
+  
+  # Kubernetes configuration
+  kubernetesServiceConnection: 'blockticket-k8s'  # Update with your K8s service connection name
+  namespace: 'blockticket'
+
+pool:
+  name: 'blockticket'
+
+stages:
+# ============================================================================
+# STAGE 1: Build and Push Docker Images
+# ============================================================================
+- stage: BuildAndPush
+  displayName: Build and Push Images
+  jobs:
+  
+  # Identity Service
+  - job: BuildIdentity
+    displayName: Build Identity Service
+    steps:
+    - task: Docker@2
+      displayName: Build and push Identity service
+      inputs:
+        containerRegistry: '$(dockerRegistryServiceConnection)'
+        repository: 'blockticket-identity'
+        command: 'buildAndPush'
+        Dockerfile: '$(Build.SourcesDirectory)/src/Services/Identity/Identity.API/Dockerfile'
+        buildContext: '$(Build.SourcesDirectory)'
+        tags: |
+          $(tag)
+          latest
+
+  # Event Service (uncomment when Dockerfile is ready)
+  # - job: BuildEvent
+  #   displayName: Build Event Service
+  #   steps:
+  #   - task: Docker@2
+  #     displayName: Build and push Event service
+  #     inputs:
+  #       containerRegistry: '$(dockerRegistryServiceConnection)'
+  #       repository: 'blockticket-event'
+  #       command: 'buildAndPush'
+  #       Dockerfile: '$(Build.SourcesDirectory)/src/Services/Event/Event.API/Dockerfile'
+  #       buildContext: '$(Build.SourcesDirectory)'
+  #       tags: |
+  #         $(tag)
+  #         latest
+
+  # Payment Service (uncomment when Dockerfile is ready)
+  # - job: BuildPayment
+  #   displayName: Build Payment Service
+  #   steps:
+  #   - task: Docker@2
+  #     displayName: Build and push Payment service
+  #     inputs:
+  #       containerRegistry: '$(dockerRegistryServiceConnection)'
+  #       repository: 'blockticket-payment'
+  #       command: 'buildAndPush'
+  #       Dockerfile: '$(Build.SourcesDirectory)/src/Services/Payment/Payment.API/Dockerfile'
+  #       buildContext: '$(Build.SourcesDirectory)'
+  #       tags: |
+  #         $(tag)
+  #         latest
+
+  # Notification Service (uncomment when Dockerfile is ready)
+  # - job: BuildNotification
+  #   displayName: Build Notification Service
+  #   steps:
+  #   - task: Docker@2
+  #     displayName: Build and push Notification service
+  #     inputs:
+  #       containerRegistry: '$(dockerRegistryServiceConnection)'
+  #       repository: 'blockticket-notification'
+  #       command: 'buildAndPush'
+  #       Dockerfile: '$(Build.SourcesDirectory)/src/Services/Notification/Notification.API/Dockerfile'
+  #       buildContext: '$(Build.SourcesDirectory)'
+  #       tags: |
+  #         $(tag)
+  #         latest
+
+  # Ticketing Service (uncomment when Dockerfile is ready)
+  # - job: BuildTicketing
+  #   displayName: Build Ticketing Service
+  #   steps:
+  #   - task: Docker@2
+  #     displayName: Build and push Ticketing service
+  #     inputs:
+  #       containerRegistry: '$(dockerRegistryServiceConnection)'
+  #       repository: 'blockticket-ticketing'
+  #       command: 'buildAndPush'
+  #       Dockerfile: '$(Build.SourcesDirectory)/src/Services/Ticketing/Ticketing.API/Dockerfile'
+  #       buildContext: '$(Build.SourcesDirectory)'
+  #       tags: |
+  #         $(tag)
+  #         latest
+
+  # API Gateway (uncomment when Dockerfile is ready)
+  # - job: BuildGateway
+  #   displayName: Build API Gateway
+  #   steps:
+  #   - task: Docker@2
+  #     displayName: Build and push API Gateway
+  #     inputs:
+  #       containerRegistry: '$(dockerRegistryServiceConnection)'
+  #       repository: 'blockticket-gateway'
+  #       command: 'buildAndPush'
+  #       Dockerfile: '$(Build.SourcesDirectory)/src/ApiGateway/Dockerfile'
+  #       buildContext: '$(Build.SourcesDirectory)'
+  #       tags: |
+  #         $(tag)
+  #         latest
+
+# ============================================================================
+# STAGE 2: Update Kubernetes Manifests
+# ============================================================================
+- stage: UpdateManifests
+  displayName: Update K8s Manifests
+  dependsOn: BuildAndPush
+  condition: succeeded()
+  jobs:
+  - job: UpdateImageTags
+    displayName: Update Image Tags in Manifests
+    steps:
+    - checkout: self
+      persistCredentials: true
+      
+    - bash: |
+        echo "Updating image tags to $(tag)"
+        
+        # Update Identity service
+        sed -i "s|image: $(containerRegistry)/blockticket-identity:.*|image: $(containerRegistry)/blockticket-identity:$(tag)|g" k8s/services/identity-service.yaml
+        
+        # Uncomment and add other services as needed
+        # sed -i "s|image: $(containerRegistry)/blockticket-event:.*|image: $(containerRegistry)/blockticket-event:$(tag)|g" k8s/services/event-service.yaml
+        # sed -i "s|image: $(containerRegistry)/blockticket-payment:.*|image: $(containerRegistry)/blockticket-payment:$(tag)|g" k8s/services/payment-service.yaml
+        
+        echo "Updated manifests:"
+        git diff k8s/services/
+      displayName: 'Update image tags in K8s manifests'
+      
+    - bash: |
+        git config user.email "azure-pipelines@blockticket.com"
+        git config user.name "Azure Pipelines"
+        git add k8s/services/*.yaml
+        git commit -m "Update image tags to build $(tag) [skip ci]" || echo "No changes to commit"
+        git push origin HEAD:$(Build.SourceBranch)
+      displayName: 'Commit updated manifests'
+      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+
+# ============================================================================
+# STAGE 3: Deploy to Development/Staging
+# ============================================================================
+- stage: DeployDev
+  displayName: Deploy to Development
+  dependsOn: UpdateManifests
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToK8s
+    displayName: Deploy to Kubernetes
+    environment: 'blockticket-dev'  # Create this environment in Azure DevOps
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          
+          - task: KubernetesManifest@0
+            displayName: Deploy Identity Service
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+              namespace: '$(namespace)'
+              manifests: |
+                $(Build.SourcesDirectory)/k8s/services/identity-service.yaml
+              containers: |
+                $(containerRegistry)/blockticket-identity:$(tag)
+          
+          # Uncomment to deploy other services
+          # - task: KubernetesManifest@0
+          #   displayName: Deploy Event Service
+          #   inputs:
+          #     action: 'deploy'
+          #     kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+          #     namespace: '$(namespace)'
+          #     manifests: |
+          #       $(Build.SourcesDirectory)/k8s/services/event-service.yaml
+          #     containers: |
+          #       $(containerRegistry)/blockticket-event:$(tag)
+          
+          - bash: |
+              echo "Deployment completed!"
+              echo "Checking pod status..."
+              kubectl get pods -n $(namespace) -l app=identity-service
+            displayName: 'Verify deployment'
+
+# ============================================================================
+# STAGE 4: Deploy to Production (Manual Approval Required)
+# ============================================================================
+- stage: DeployProd
+  displayName: Deploy to Production
+  dependsOn: DeployDev
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployToProduction
+    displayName: Deploy to Production K8s
+    environment: 'blockticket-prod'  # Create this environment with approval gates
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          
+          - task: KubernetesManifest@0
+            displayName: Deploy Identity Service to Production
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+              namespace: '$(namespace)'
+              manifests: |
+                $(Build.SourcesDirectory)/k8s/services/identity-service.yaml
+              containers: |
+                $(containerRegistry)/blockticket-identity:$(tag)
+          
+          - bash: |
+              echo "Production deployment completed!"
+              echo "Checking production pod status..."
+              kubectl get pods -n $(namespace) -l app=identity-service
+              kubectl get svc -n $(namespace)
+            displayName: 'Verify production deployment'
