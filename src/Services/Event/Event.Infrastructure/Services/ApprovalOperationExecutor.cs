@@ -604,7 +604,7 @@ public class ApprovalOperationExecutor : IApprovalOperationExecutor
 
         var errors = new List<string>();
 
-        if (eventAggregate.Status == Domain.Enums.EventStatus.Cancelled || eventAggregate.Status == Domain.Enums.EventStatus.Completed)
+        if (eventAggregate.Status == Domain.Enums.EventStatus.Canceled || eventAggregate.Status == Domain.Enums.EventStatus.Archived)
         {
             errors.Add($"Cannot cancel event in {eventAggregate.Status} status");
         }

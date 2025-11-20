@@ -49,7 +49,7 @@ public class GetRolesQueryHandler : IQueryHandler<GetRolesQuery, Result<IEnumera
                 IsSystemRole = r.IsSystemRole,
                 IsActive = r.IsActive,
                 Priority = r.Priority,
-                Permissions = r.Permissions.Select(p => new PermissionDto
+                Permissions = r.RolePermissions.Select(rp => rp.Permission).Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,
@@ -103,7 +103,7 @@ public class GetRoleByNameQueryHandler : IQueryHandler<GetRoleByNameQuery, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.Permissions.Select(p => new PermissionDto
+                Permissions = role.RolePermissions.Select(rp => rp.Permission).Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,
@@ -207,7 +207,7 @@ public class CheckUserPermissionQueryHandler : IQueryHandler<CheckUserPermission
 
             foreach (var role in activeRoles)
             {
-                if (role.HasPermission(request.Resource, request.Action))
+                if (role.RolePermissions.Any(rp => rp.Permission.Resource == request.Resource && rp.Permission.Action == request.Action && rp.Permission.IsActive))
                 {
                     grantingRoles.Add(role.Name);
                 }

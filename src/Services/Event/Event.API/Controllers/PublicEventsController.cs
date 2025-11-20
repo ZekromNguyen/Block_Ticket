@@ -5,6 +5,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
 
+using Event.Domain.Enums;
 namespace Event.API.Controllers;
 
 /// <summary>
@@ -121,7 +122,7 @@ public class PublicEventsController : ControllerBase
     {
         _logger.LogInformation("Getting public event detail {EventId}", eventId);
 
-        var query = new GetEventQuery(eventId, true, false, false); // Include ticket types but not pricing rules or allocations
+        var query = new GetEventQuery(eventId, true, false); // Include ticket types but not pricing rules
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result == null)
@@ -130,7 +131,7 @@ public class PublicEventsController : ControllerBase
         }
 
         // Check if event is published and available to public
-        if (result.Status != "Published" && result.Status != "OnSale")
+        if (result.Status != EventStatus.Published)
         {
             return NotFound($"Event with ID '{eventId}' is not available to the public");
         }
@@ -156,10 +157,10 @@ public class PublicEventsController : ControllerBase
         [FromRoute] string slug,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting public event detail by slug {Slug} for organization {OrganizationId}", 
+        _logger.LogInformation("Getting public event detail by slug {Slug} for organization {OrganizationId}",
             slug, organizationId);
 
-        var query = new GetEventBySlugQuery(slug, organizationId, true, false, false);
+        var query = new GetEventBySlugQuery(slug, organizationId, true, false);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result == null)
@@ -168,7 +169,7 @@ public class PublicEventsController : ControllerBase
         }
 
         // Check if event is published and available to public
-        if (result.Status != "Published" && result.Status != "OnSale")
+        if (result.Status != EventStatus.Published)
         {
             return NotFound($"Event with slug '{slug}' is not available to the public");
         }
@@ -281,10 +282,10 @@ public class PublicEventsController : ControllerBase
                 Description = tt.Description,
                 BasePrice = tt.BasePrice,
                 ServiceFee = tt.ServiceFee,
-                TotalPrice = new MoneyDto 
-                { 
-                    Amount = tt.BasePrice.Amount + (tt.ServiceFee?.Amount ?? 0), 
-                    Currency = tt.BasePrice.Currency 
+                TotalPrice = new MoneyDto
+                {
+                    Amount = tt.BasePrice.Amount + (tt.ServiceFee?.Amount ?? 0),
+                    Currency = tt.BasePrice.Currency
                 },
                 AvailableQuantity = tt.Capacity.Available,
                 MinPurchaseQuantity = tt.MinPurchaseQuantity,

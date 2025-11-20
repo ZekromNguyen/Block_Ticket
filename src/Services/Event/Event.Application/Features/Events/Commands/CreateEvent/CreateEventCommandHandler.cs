@@ -55,7 +55,7 @@ public class CreateEventCommandHandler : IRequestHandler<CreateEventCommand, Eve
             createdEvent.Id, request.Slug);
 
         // Convert to DTO
-        return MapToDto(createdEvent);
+        return EventDto.FromEntity(createdEvent);
     }
 
     private async Task ValidateSlugUniqueness(string slug, Guid organizationId, CancellationToken cancellationToken)
@@ -133,34 +133,5 @@ public class CreateEventCommandHandler : IRequestHandler<CreateEventCommand, Eve
         return eventAggregate;
     }
 
-    private static EventDto MapToDto(EventAggregate eventAggregate)
-    {
-        return new EventDto
-        {
-            Id = eventAggregate.Id,
-            Title = eventAggregate.Title,
-            Description = eventAggregate.Description,
-            Slug = eventAggregate.Slug.Value,
-            OrganizationId = eventAggregate.OrganizationId,
-            PromoterId = eventAggregate.PromoterId,
-            VenueId = eventAggregate.VenueId,
-            Status = eventAggregate.Status.ToString(),
-            EventDate = eventAggregate.EventDate,
-            TimeZone = eventAggregate.TimeZone.Value,
-            PublishStartDate = eventAggregate.PublishWindow?.StartDate,
-            PublishEndDate = eventAggregate.PublishWindow?.EndDate,
-            ImageUrl = eventAggregate.ImageUrl,
-            BannerUrl = eventAggregate.BannerUrl,
-            SeoTitle = eventAggregate.SeoTitle,
-            SeoDescription = eventAggregate.SeoDescription,
-            Categories = eventAggregate.Categories.ToList(),
-            Tags = eventAggregate.Tags.ToList(),
-            Version = eventAggregate.Version,
-            CreatedAt = eventAggregate.CreatedAt,
-            UpdatedAt = eventAggregate.UpdatedAt,
-            TicketTypes = new List<TicketTypeDto>(), // Will be populated when ticket types are added
-            PricingRules = new List<PricingRuleDto>(), // Will be populated when pricing rules are added
-            Allocations = new List<AllocationDto>() // Will be populated when allocations are added
-        };
-    }
+
 }

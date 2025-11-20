@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using NpgsqlTypes;
 
 #nullable disable
 
@@ -34,29 +33,9 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<int>("AllocatedQuantity")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<string>("AllocatedSeatIds")
+                    b.Property<string>("AllowedCustomerSegments")
                         .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("allocated_seat_ids");
-
-                    b.Property<string>("AllowedEmailDomains")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("allowed_email_domains");
-
-                    b.Property<string>("AllowedUserIds")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("allowed_user_ids");
-
-                    b.Property<DateTime?>("AvailableFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("AvailableUntil")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -71,33 +50,58 @@ namespace Event.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
-                    b.Property<bool>("IsActive")
+                    b.Property<bool>("IsEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
+                    b.Property<int?>("MaxPerCustomer")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Metadata")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("MinPerCustomer")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Priority")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("ByQuantity");
+
+                    b.Property<DateTime?>("StartTime")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("TicketTypeId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("TotalQuantity")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -111,46 +115,408 @@ namespace Event.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<int>("UsedQuantity")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AccessCode")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Allocations_AccessCode")
+                        .HasFilter("\"AccessCode\" IS NOT NULL");
+
+                    b.HasIndex("EventId")
+                        .HasDatabaseName("IX_Allocations_EventId");
 
                     b.HasIndex("TicketTypeId")
                         .HasDatabaseName("IX_Allocations_TicketTypeId")
                         .HasFilter("\"TicketTypeId\" IS NOT NULL");
 
-                    b.HasIndex("AccessCode", "IsActive")
-                        .HasDatabaseName("IX_Allocations_AccessCode_Active")
-                        .HasFilter("\"AccessCode\" IS NOT NULL");
+                    b.HasIndex("Type")
+                        .HasDatabaseName("IX_Allocations_Type");
 
-                    b.HasIndex("AvailableFrom", "AvailableUntil")
-                        .HasDatabaseName("IX_Allocations_AvailabilityWindow")
-                        .HasFilter("\"AvailableFrom\" IS NOT NULL OR \"AvailableUntil\" IS NOT NULL");
+                    b.HasIndex("EventId", "IsEnabled")
+                        .HasDatabaseName("IX_Allocations_Event_Enabled");
 
-                    b.HasIndex("IsActive", "ExpiresAt")
-                        .HasDatabaseName("IX_Allocations_Active_Expires")
-                        .HasFilter("\"ExpiresAt\" IS NOT NULL");
+                    b.HasIndex("EventId", "Type")
+                        .HasDatabaseName("IX_Allocations_Event_Type");
 
-                    b.HasIndex("EventId", "Type", "IsActive")
-                        .HasDatabaseName("IX_Allocations_Event_Type_Active");
+                    b.HasIndex("EventId", "Priority", "Name")
+                        .HasDatabaseName("IX_Allocations_Event_Priority_Name");
 
-                    b.HasIndex("EventId", "IsActive", "AvailableFrom", "AvailableUntil")
-                        .HasDatabaseName("IX_Allocations_Event_Active_Available");
+                    b.HasIndex("EventId", "StartTime", "EndTime")
+                        .HasDatabaseName("IX_Allocations_Event_TimeWindow");
+
+                    b.HasIndex("EventId", "IsEnabled", "StartTime", "EndTime")
+                        .HasDatabaseName("IX_Allocations_Event_Active")
+                        .HasFilter("\"IsEnabled\" = true");
 
                     b.ToTable("allocations", "event", t =>
                         {
-                            t.HasCheckConstraint("CK_Allocations_AccessCode_Consistency", "(\"Type\" IN ('Presale', 'VIP') AND \"AccessCode\" IS NOT NULL) OR (\"Type\" NOT IN ('Presale', 'VIP'))");
+                            t.HasCheckConstraint("CK_Allocations_MaxPerCustomer_Positive", "\"MaxPerCustomer\" IS NULL OR \"MaxPerCustomer\" > 0");
 
-                            t.HasCheckConstraint("CK_Allocations_AvailabilityWindow_Valid", "\"AvailableFrom\" IS NULL OR \"AvailableUntil\" IS NULL OR \"AvailableFrom\" < \"AvailableUntil\"");
+                            t.HasCheckConstraint("CK_Allocations_MinMax_PerCustomer", "\"MinPerCustomer\" IS NULL OR \"MaxPerCustomer\" IS NULL OR \"MinPerCustomer\" <= \"MaxPerCustomer\"");
 
-                            t.HasCheckConstraint("CK_Allocations_ExpiresAt_Valid", "\"ExpiresAt\" IS NULL OR \"ExpiresAt\" > \"CreatedAt\"");
+                            t.HasCheckConstraint("CK_Allocations_MinPerCustomer_Positive", "\"MinPerCustomer\" IS NULL OR \"MinPerCustomer\" > 0");
 
-                            t.HasCheckConstraint("CK_Allocations_NotExpiredWhenActive", "NOT \"IsActive\" OR \"ExpiresAt\" IS NULL OR \"ExpiresAt\" > NOW()");
+                            t.HasCheckConstraint("CK_Allocations_Name_NotEmpty", "LENGTH(TRIM(\"Name\")) > 0");
 
-                            t.HasCheckConstraint("CK_Allocations_Quantity_Valid", "\"TotalQuantity\" > 0 AND \"AllocatedQuantity\" >= 0 AND \"AllocatedQuantity\" <= \"TotalQuantity\"");
+                            t.HasCheckConstraint("CK_Allocations_Quantity_Positive", "\"Quantity\" > 0");
 
-                            t.HasCheckConstraint("CK_Allocations_Type_Valid", "\"Type\" IN ('Public', 'PromoterHold', 'ArtistHold', 'Presale', 'VIP', 'Press')");
+                            t.HasCheckConstraint("CK_Allocations_TimeWindow", "\"StartTime\" IS NULL OR \"EndTime\" IS NULL OR \"StartTime\" < \"EndTime\"");
+
+                            t.HasCheckConstraint("CK_Allocations_UsedQuantity_LessOrEqual_Quantity", "\"UsedQuantity\" <= \"Quantity\"");
+
+                            t.HasCheckConstraint("CK_Allocations_UsedQuantity_NonNegative", "\"UsedQuantity\" >= 0");
                         });
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.AssetCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("IconUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Level")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("ix_asset_categories_active");
+
+                    b.HasIndex("Level")
+                        .HasDatabaseName("ix_asset_categories_level");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_asset_categories_rls");
+
+                    b.HasIndex("ParentCategoryId")
+                        .HasDatabaseName("ix_asset_categories_parent_id");
+
+                    b.HasIndex("Path")
+                        .HasDatabaseName("ix_asset_categories_path");
+
+                    b.HasIndex("Name", "Description")
+                        .HasDatabaseName("ix_asset_categories_search");
+
+                    b.HasIndex("OrganizationId", "ParentCategoryId")
+                        .HasDatabaseName("ix_asset_categories_org_parent");
+
+                    b.HasIndex("OrganizationId", "ParentCategoryId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_asset_categories_unique_name_in_parent");
+
+                    b.HasIndex("OrganizationId", "ParentCategoryId", "SortOrder")
+                        .HasDatabaseName("ix_asset_categories_org_parent_sort");
+
+                    b.ToTable("asset_categories", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.AssetVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChangeDescription")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsProcessed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProcessingLog")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("UsageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId")
+                        .HasDatabaseName("ix_asset_versions_asset_id");
+
+                    b.HasIndex("IsProcessed")
+                        .HasDatabaseName("ix_asset_versions_processed");
+
+                    b.HasIndex("LastUsedAt")
+                        .HasDatabaseName("ix_asset_versions_last_used");
+
+                    b.HasIndex("ProcessedAt")
+                        .HasDatabaseName("ix_asset_versions_processed_at");
+
+                    b.HasIndex("UsageCount")
+                        .HasDatabaseName("ix_asset_versions_usage_count");
+
+                    b.HasIndex("AssetId", "VersionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_asset_versions_asset_version");
+
+                    b.ToTable("asset_versions", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.CampaignVariant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CampaignId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("ConfidenceLevel")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsControl")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsWinner")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PrimaryAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double?>("StatisticalSignificance")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("TotalClicks")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("TotalConversionValue")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("TotalConversions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("TotalImpressions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<double>("TrafficPercentage")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("_assetIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("asset_ids");
+
+                    b.Property<string>("_metrics")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metrics");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId")
+                        .HasDatabaseName("ix_campaign_variants_campaign_id");
+
+                    b.HasIndex("ConfidenceLevel")
+                        .HasDatabaseName("ix_campaign_variants_confidence");
+
+                    b.HasIndex("IsControl")
+                        .HasDatabaseName("ix_campaign_variants_control");
+
+                    b.HasIndex("IsWinner")
+                        .HasDatabaseName("ix_campaign_variants_winner");
+
+                    b.HasIndex("PrimaryAssetId")
+                        .HasDatabaseName("ix_campaign_variants_primary_asset");
+
+                    b.HasIndex("StatisticalSignificance")
+                        .HasDatabaseName("ix_campaign_variants_significance");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_campaign_variants_status");
+
+                    b.HasIndex("TotalClicks")
+                        .HasDatabaseName("ix_campaign_variants_clicks");
+
+                    b.HasIndex("TotalConversionValue")
+                        .HasDatabaseName("ix_campaign_variants_conversion_value");
+
+                    b.HasIndex("TotalConversions")
+                        .HasDatabaseName("ix_campaign_variants_conversions");
+
+                    b.HasIndex("TotalImpressions")
+                        .HasDatabaseName("ix_campaign_variants_impressions");
+
+                    b.HasIndex("TrafficPercentage")
+                        .HasDatabaseName("ix_campaign_variants_traffic");
+
+                    b.HasIndex("CampaignId", "IsControl")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_variants_unique_control")
+                        .HasFilter("\"IsControl\" = true");
+
+                    b.HasIndex("CampaignId", "IsWinner")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_variants_unique_winner")
+                        .HasFilter("\"IsWinner\" = true");
+
+                    b.HasIndex("CampaignId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_campaign_variants_unique_name");
+
+                    b.HasIndex("CampaignId", "Status")
+                        .HasDatabaseName("ix_campaign_variants_campaign_status");
+
+                    b.HasIndex("CampaignId", "TrafficPercentage")
+                        .HasDatabaseName("ix_campaign_variants_campaign_traffic");
+
+                    b.HasIndex("Name", "Description")
+                        .HasDatabaseName("ix_campaign_variants_search");
+
+                    b.ToTable("campaign_variants", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.EventAggregate", b =>
@@ -194,17 +560,6 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<DateTime>("ETagUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("etag_updated_at");
-
-                    b.Property<string>("ETagValue")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("etag_value");
-
                     b.Property<DateTime>("EndDateTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -218,10 +573,6 @@ namespace Event.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
@@ -231,19 +582,8 @@ namespace Event.Infrastructure.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("bytea")
-                        .HasColumnName("row_version");
-
-                    b.Property<NpgsqlTsVector>("SearchVector")
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("tsvector")
-                        .HasComputedColumnSql("to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))", true)
-                        .HasAnnotation("Npgsql:TsVectorConfig", "english")
-                        .HasAnnotation("Npgsql:TsVectorProperties", new[] { "Title", "Description" });
+                    b.Property<int>("RefundCutoffDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("SeoDescription")
                         .HasMaxLength(300)
@@ -293,32 +633,18 @@ namespace Event.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("Version")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ETagUpdatedAt")
-                        .HasDatabaseName("IX_EventAggregate_ETagTimestamp");
-
-                    b.HasIndex("ETagValue")
-                        .HasDatabaseName("IX_EventAggregate_ETag");
-
                     b.HasIndex("PromoterId")
                         .HasDatabaseName("IX_Events_PromoterId");
 
-                    b.HasIndex("SearchVector")
-                        .HasDatabaseName("IX_Events_SearchVector");
-
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SearchVector"), "GIN");
-
                     b.HasIndex("VenueId")
                         .HasDatabaseName("IX_Events_VenueId");
-
-                    b.HasIndex("EventDate", "Status")
-                        .HasDatabaseName("IX_Events_ActiveEvents")
-                        .HasFilter("\"Status\" IN ('Published', 'OnSale')");
 
                     b.HasIndex("OrganizationId", "Slug")
                         .IsUnique()
@@ -330,20 +656,7 @@ namespace Event.Infrastructure.Migrations
                     b.HasIndex("OrganizationId", "Status", "EventDate")
                         .HasDatabaseName("IX_Events_Organization_Status_EventDate");
 
-                    b.ToTable("events", "event", t =>
-                        {
-                            t.HasCheckConstraint("CK_EventAggregate_ETag_NotEmpty", "LENGTH(etag_value) > 0");
-
-                            t.HasCheckConstraint("CK_EventAggregate_ETag_ValidTimestamp", "etag_updated_at <= NOW() AND etag_updated_at > '2024-01-01'::timestamp");
-
-                            t.HasCheckConstraint("CK_Events_EventDate_Future", "\"EventDate\" > \"CreatedAt\"");
-
-                            t.HasCheckConstraint("CK_Events_PublishWindow_Valid", "publish_start_date IS NULL OR publish_end_date IS NULL OR publish_start_date < publish_end_date");
-
-                            t.HasCheckConstraint("CK_Events_Status_Valid", "\"Status\" IN ('Draft', 'Review', 'Published', 'OnSale', 'SoldOut', 'Completed', 'Cancelled', 'Archived')");
-
-                            t.HasCheckConstraint("CK_Events_Version_Positive", "\"Version\" > 0");
-                        });
+                    b.ToTable("events", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.EventSeries", b =>
@@ -446,44 +759,30 @@ namespace Event.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
-                        .HasDatabaseName("IX_EventSeries_Name");
-
-                    b.HasIndex("PromoterId")
-                        .HasDatabaseName("IX_EventSeries_PromoterId");
-
-                    b.HasIndex("IsActive", "MaxEvents")
-                        .HasDatabaseName("IX_EventSeries_Active_MaxEvents")
-                        .HasFilter("\"MaxEvents\" IS NOT NULL");
-
-                    b.HasIndex("OrganizationId", "IsActive")
-                        .HasDatabaseName("IX_EventSeries_Organization_Active");
-
-                    b.HasIndex("OrganizationId", "Slug")
-                        .IsUnique()
-                        .HasDatabaseName("IX_EventSeries_Organization_Slug");
-
-                    b.HasIndex("IsActive", "SeriesStartDate", "SeriesEndDate")
-                        .HasDatabaseName("IX_EventSeries_Active_Dates");
-
-                    b.ToTable("event_series", "event", t =>
-                        {
-                            t.HasCheckConstraint("CK_EventSeries_MaxEvents_Positive", "\"MaxEvents\" IS NULL OR \"MaxEvents\" > 0");
-
-                            t.HasCheckConstraint("CK_EventSeries_SeriesDates_Valid", "\"SeriesStartDate\" IS NULL OR \"SeriesEndDate\" IS NULL OR \"SeriesStartDate\" < \"SeriesEndDate\"");
-
-                            t.HasCheckConstraint("CK_EventSeries_SeriesStartDate_Valid", "\"SeriesStartDate\" IS NULL OR \"SeriesStartDate\" >= \"CreatedAt\"");
-
-                            t.HasCheckConstraint("CK_EventSeries_Version_Positive", "\"Version\" > 0");
-                        });
+                    b.ToTable("event_series", "event");
                 });
 
-            modelBuilder.Entity("Event.Domain.Entities.IdempotencyRecord", b =>
+            modelBuilder.Entity("Event.Domain.Entities.MarketingAsset", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ApprovalWorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("AssetCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -491,63 +790,51 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("HttpMethod")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasColumnName("http_method");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("idempotency_key");
-
-                    b.Property<Guid?>("OrganizationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("organization_id");
-
-                    b.Property<DateTime>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("processed_at");
-
-                    b.Property<string>("RequestBody")
-                        .HasColumnType("text")
-                        .HasColumnName("request_body");
-
-                    b.Property<string>("RequestHeaders")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("request_headers");
-
-                    b.Property<string>("RequestId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("request_id");
-
-                    b.Property<string>("RequestPath")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
-                        .HasColumnName("request_path");
-
-                    b.Property<string>("ResponseBody")
-                        .HasColumnType("text")
-                        .HasColumnName("response_body");
-
-                    b.Property<string>("ResponseHeaders")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("response_headers");
-
-                    b.Property<int>("ResponseStatusCode")
+                    b.Property<int>("CurrentVersion")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("response_status_code");
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ParentAssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -555,40 +842,272 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
-                    b.Property<string>("UserId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("user_id");
+                    b.Property<int>("UsageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("_tags")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tags");
+
+                    b.Property<string>("_usageContexts")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("usage_contexts");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExpiresAt")
-                        .HasDatabaseName("idx_idempotency_records_expires_at");
+                    b.HasIndex("AssetCategoryId");
 
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique()
-                        .HasDatabaseName("idx_idempotency_records_key");
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("ix_marketing_assets_category_id");
+
+                    b.HasIndex("LastUsedAt")
+                        .HasDatabaseName("ix_marketing_assets_last_used");
 
                     b.HasIndex("OrganizationId")
-                        .HasDatabaseName("idx_idempotency_records_organization_id");
+                        .HasDatabaseName("ix_marketing_assets_rls");
 
-                    b.HasIndex("ProcessedAt")
-                        .HasDatabaseName("idx_idempotency_records_processed_at");
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_marketing_assets_status");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("idx_idempotency_records_user_id");
+                    b.HasIndex("Type")
+                        .HasDatabaseName("ix_marketing_assets_type");
 
-                    b.HasIndex("RequestPath", "HttpMethod")
-                        .HasDatabaseName("idx_idempotency_records_path_method");
+                    b.HasIndex("UsageCount")
+                        .HasDatabaseName("ix_marketing_assets_usage_count");
 
-                    b.ToTable("idempotency_records", "event", t =>
-                        {
-                            t.HasCheckConstraint("ck_idempotency_records_expires_at_future", "expires_at > processed_at");
+                    b.HasIndex("Name", "Description")
+                        .HasDatabaseName("ix_marketing_assets_search");
 
-                            t.HasCheckConstraint("ck_idempotency_records_http_method", "http_method IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')");
+                    b.HasIndex("OrganizationId", "Status")
+                        .HasDatabaseName("ix_marketing_assets_org_status");
 
-                            t.HasCheckConstraint("ck_idempotency_records_status_code", "response_status_code >= 0 AND response_status_code <= 999");
-                        });
+                    b.HasIndex("OrganizationId", "Type")
+                        .HasDatabaseName("ix_marketing_assets_org_type");
+
+                    b.ToTable("marketing_assets", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.MarketingCampaign", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Budget")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<double?>("ConfidenceThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("double precision")
+                        .HasDefaultValue(95.0);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("USD");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsABTest")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PrimaryContext")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("StartDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("StatisticalSignificance")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("TestCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TotalClicks")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("TotalConversions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("TotalImpressions")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("TotalSpent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("WinningVariantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("_metrics")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metrics");
+
+                    b.Property<string>("_targetAudiences")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_audiences");
+
+                    b.Property<string>("_targetEventIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_event_ids");
+
+                    b.Property<string>("_targetVenueIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("target_venue_ids");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EndDate")
+                        .HasDatabaseName("ix_marketing_campaigns_end_date");
+
+                    b.HasIndex("IsABTest")
+                        .HasDatabaseName("ix_marketing_campaigns_ab_test");
+
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_marketing_campaigns_rls");
+
+                    b.HasIndex("PrimaryContext")
+                        .HasDatabaseName("ix_marketing_campaigns_context");
+
+                    b.HasIndex("StartDate")
+                        .HasDatabaseName("ix_marketing_campaigns_start_date");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_marketing_campaigns_status");
+
+                    b.HasIndex("TestCompletedAt")
+                        .HasDatabaseName("ix_marketing_campaigns_test_completed");
+
+                    b.HasIndex("TotalClicks")
+                        .HasDatabaseName("ix_marketing_campaigns_clicks");
+
+                    b.HasIndex("TotalConversions")
+                        .HasDatabaseName("ix_marketing_campaigns_conversions");
+
+                    b.HasIndex("TotalImpressions")
+                        .HasDatabaseName("ix_marketing_campaigns_impressions");
+
+                    b.HasIndex("TotalSpent")
+                        .HasDatabaseName("ix_marketing_campaigns_total_spent");
+
+                    b.HasIndex("WinningVariantId")
+                        .HasDatabaseName("ix_marketing_campaigns_winning_variant");
+
+                    b.HasIndex("Name", "Description")
+                        .HasDatabaseName("ix_marketing_campaigns_search");
+
+                    b.HasIndex("OrganizationId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_marketing_campaigns_unique_name");
+
+                    b.HasIndex("OrganizationId", "Status")
+                        .HasDatabaseName("ix_marketing_campaigns_org_status");
+
+                    b.HasIndex("StartDate", "EndDate")
+                        .HasDatabaseName("ix_marketing_campaigns_date_range");
+
+                    b.ToTable("marketing_campaigns", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.Organization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Organizations", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.PricingRule", b =>
@@ -690,6 +1209,9 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("EventId")
@@ -742,32 +1264,16 @@ namespace Event.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Event.Domain.Entities.Reservation", b =>
+            modelBuilder.Entity("Event.Domain.Entities.Promoter", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CancellationReason")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("CancelledAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ConfirmedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CustomerEmail")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("CustomerNotes")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("DeletedAt")
@@ -776,116 +1282,20 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
-                    b.Property<string>("DiscountCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
 
-                    b.Property<Guid>("EventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("InternalNotes")
+                    b.Property<string>("FirstName")
+                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("ReservationNumber")
+                    b.Property<string>("LastName")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Active");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventId")
-                        .HasDatabaseName("IX_Reservations_EventId");
-
-                    b.HasIndex("ReservationNumber")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Reservations_Number");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_Reservations_UserId");
-
-                    b.HasIndex("DiscountCode", "Status")
-                        .HasDatabaseName("IX_Reservations_DiscountCode_Status")
-                        .HasFilter("\"DiscountCode\" IS NOT NULL");
-
-                    b.HasIndex("EventId", "ConfirmedAt")
-                        .HasDatabaseName("IX_Reservations_Event_Confirmed")
-                        .HasFilter("\"ConfirmedAt\" IS NOT NULL");
-
-                    b.HasIndex("Status", "ExpiresAt")
-                        .HasDatabaseName("IX_Reservations_Status_Expires")
-                        .HasFilter("\"Status\" = 'Active'");
-
-                    b.HasIndex("UserId", "Status")
-                        .HasDatabaseName("IX_Reservations_User_Status");
-
-                    b.HasIndex("EventId", "Status", "ExpiresAt")
-                        .HasDatabaseName("IX_Reservations_Event_Status_Expires");
-
-                    b.ToTable("reservations", "event", t =>
-                        {
-                            t.HasCheckConstraint("CK_Reservations_CancelledAt_Valid", "\"CancelledAt\" IS NULL OR \"CancelledAt\" >= \"CreatedAt\"");
-
-                            t.HasCheckConstraint("CK_Reservations_ConfirmedAt_Valid", "\"ConfirmedAt\" IS NULL OR \"ConfirmedAt\" >= \"CreatedAt\"");
-
-                            t.HasCheckConstraint("CK_Reservations_Currency_Match", "discount_currency IS NULL OR discount_currency = currency");
-
-                            t.HasCheckConstraint("CK_Reservations_DiscountAmount_Positive", "discount_amount IS NULL OR discount_amount >= 0");
-
-                            t.HasCheckConstraint("CK_Reservations_ExpiresAt_Future", "\"ExpiresAt\" > \"CreatedAt\"");
-
-                            t.HasCheckConstraint("CK_Reservations_Status_Valid", "\"Status\" IN ('Active', 'Confirmed', 'Cancelled', 'Expired', 'Released')");
-
-                            t.HasCheckConstraint("CK_Reservations_Timing_Valid", "(\"Status\" = 'Confirmed' AND \"ConfirmedAt\" IS NOT NULL) OR (\"Status\" = 'Cancelled' AND \"CancelledAt\" IS NOT NULL) OR (\"Status\" IN ('Active', 'Expired', 'Released'))");
-
-                            t.HasCheckConstraint("CK_Reservations_TotalAmount_Positive", "total_amount >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("Event.Domain.Entities.ReservationItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("ReservationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SeatId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TicketTypeId")
-                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -895,21 +1305,7 @@ namespace Event.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReservationId");
-
-                    b.HasIndex("SeatId")
-                        .HasDatabaseName("IX_ReservationItems_SeatId")
-                        .HasFilter("\"SeatId\" IS NOT NULL");
-
-                    b.HasIndex("TicketTypeId")
-                        .HasDatabaseName("IX_ReservationItems_TicketTypeId");
-
-                    b.ToTable("reservation_items", "event", t =>
-                        {
-                            t.HasCheckConstraint("CK_ReservationItems_Quantity_Positive", "\"Quantity\" > 0");
-
-                            t.HasCheckConstraint("CK_ReservationItems_UnitPrice_Positive", "unit_price_amount >= 0");
-                        });
+                    b.ToTable("Promoters", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.Seat", b =>
@@ -926,9 +1322,6 @@ namespace Event.Infrastructure.Migrations
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
-
-                    b.Property<Guid?>("CurrentReservationId")
-                        .HasColumnType("uuid");
 
                     b.Property<bool>("HasRestrictedView")
                         .ValueGeneratedOnAdd()
@@ -947,9 +1340,6 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("PriceCategory")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime?>("ReservedUntil")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -973,17 +1363,9 @@ namespace Event.Infrastructure.Migrations
                         .HasDatabaseName("IX_Seats_AllocatedToTicketTypeId")
                         .HasFilter("\"AllocatedToTicketTypeId\" IS NOT NULL");
 
-                    b.HasIndex("CurrentReservationId")
-                        .HasDatabaseName("IX_Seats_CurrentReservationId")
-                        .HasFilter("\"CurrentReservationId\" IS NOT NULL");
-
                     b.HasIndex("AllocatedToTicketTypeId", "Status")
                         .HasDatabaseName("IX_Seats_TicketType_Status")
                         .HasFilter("\"AllocatedToTicketTypeId\" IS NOT NULL");
-
-                    b.HasIndex("Status", "ReservedUntil")
-                        .HasDatabaseName("IX_Seats_Status_ReservedUntil")
-                        .HasFilter("\"ReservedUntil\" IS NOT NULL");
 
                     b.HasIndex("VenueId", "PriceCategory")
                         .HasDatabaseName("IX_Seats_Venue_PriceCategory")
@@ -996,6 +1378,36 @@ namespace Event.Infrastructure.Migrations
                         .HasDatabaseName("IX_Seats_Venue_Status_Accessible");
 
                     b.ToTable("seats", "event");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.SeatAllocation", b =>
+                {
+                    b.Property<Guid>("AllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SeatId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("AllocationId", "SeatId");
+
+                    b.HasIndex("SeatId");
+
+                    b.ToTable("SeatAllocations", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.TicketType", b =>
@@ -1024,13 +1436,6 @@ namespace Event.Infrastructure.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("ETagUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ETagValue")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
@@ -1103,7 +1508,7 @@ namespace Event.Infrastructure.Migrations
 
                     b.HasIndex("EventId", "IsVisible")
                         .HasDatabaseName("IX_TicketTypes_Available")
-                        .HasFilter("available_capacity > 0 AND \"IsVisible\" = true");
+                        .HasFilter("(total_capacity - held_capacity - sold_capacity) > 0 AND \"IsVisible\" = true");
 
                     b.ToTable("ticket_types", "event");
                 });
@@ -1151,8 +1556,8 @@ namespace Event.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("SeatMap")
-                        .HasColumnType("text");
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("SeatMapChecksum")
                         .HasMaxLength(64)
@@ -1188,31 +1593,7 @@ namespace Event.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("HasSeatMap")
-                        .HasDatabaseName("IX_Venues_HasSeatMap");
-
-                    b.HasIndex("Name")
-                        .HasDatabaseName("IX_Venues_Name");
-
-                    b.HasIndex("SeatMapLastUpdated")
-                        .HasDatabaseName("IX_Venues_SeatMapLastUpdated")
-                        .HasFilter("\"SeatMapLastUpdated\" IS NOT NULL");
-
-                    b.HasIndex("TotalCapacity")
-                        .HasDatabaseName("IX_Venues_TotalCapacity");
-
-                    b.ToTable("venues", "event", t =>
-                        {
-                            t.HasCheckConstraint("CK_Venues_Capacity_Positive", "\"TotalCapacity\" > 0");
-
-                            t.HasCheckConstraint("CK_Venues_Coordinates_Valid", "(latitude IS NULL AND longitude IS NULL) OR (latitude IS NOT NULL AND longitude IS NOT NULL AND latitude >= -90 AND latitude <= 90 AND longitude >= -180 AND longitude <= 180)");
-
-                            t.HasCheckConstraint("CK_Venues_Email_Format", "\"ContactEmail\" IS NULL OR \"ContactEmail\" ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'");
-
-                            t.HasCheckConstraint("CK_Venues_SeatMap_Consistency", "(\"HasSeatMap\" = false AND \"SeatMapMetadata\" IS NULL AND \"SeatMapChecksum\" IS NULL AND \"SeatMapLastUpdated\" IS NULL) OR (\"HasSeatMap\" = true AND \"SeatMapMetadata\" IS NOT NULL AND \"SeatMapChecksum\" IS NOT NULL AND \"SeatMapLastUpdated\" IS NOT NULL)");
-
-                            t.HasCheckConstraint("CK_Venues_Website_Format", "\"Website\" IS NULL OR \"Website\" ~ '^https?://'");
-                        });
+                    b.ToTable("venues", "event");
                 });
 
             modelBuilder.Entity("Event.Domain.Models.ApprovalAuditLog", b =>
@@ -1686,7 +2067,7 @@ namespace Event.Infrastructure.Migrations
             modelBuilder.Entity("Event.Domain.Entities.Allocation", b =>
                 {
                     b.HasOne("Event.Domain.Entities.EventAggregate", "Event")
-                        .WithMany("Allocations")
+                        .WithMany()
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1701,8 +2082,189 @@ namespace Event.Infrastructure.Migrations
                     b.Navigation("TicketType");
                 });
 
+            modelBuilder.Entity("Event.Domain.Entities.AssetCategory", b =>
+                {
+                    b.HasOne("Event.Domain.Entities.AssetCategory", "ParentCategory")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.OwnsOne("Event.Domain.ValueObjects.Slug", "Slug", b1 =>
+                        {
+                            b1.Property<Guid>("AssetCategoryId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Value")
+                                .IsRequired()
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("slug");
+
+                            b1.HasKey("AssetCategoryId");
+
+                            b1.ToTable("asset_categories", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AssetCategoryId");
+                        });
+
+                    b.Navigation("ParentCategory");
+
+                    b.Navigation("Slug")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.AssetVersion", b =>
+                {
+                    b.HasOne("Event.Domain.Entities.MarketingAsset", "Asset")
+                        .WithMany("Versions")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetDimensions", "Dimensions", b1 =>
+                        {
+                            b1.Property<Guid>("AssetVersionId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Height")
+                                .HasColumnType("integer")
+                                .HasColumnName("height");
+
+                            b1.Property<int>("Width")
+                                .HasColumnType("integer")
+                                .HasColumnName("width");
+
+                            b1.HasKey("AssetVersionId");
+
+                            b1.ToTable("asset_versions", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AssetVersionId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetFileInfo", "FileInfo", b1 =>
+                        {
+                            b1.Property<Guid>("AssetVersionId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Checksum")
+                                .HasMaxLength(64)
+                                .HasColumnType("character varying(64)")
+                                .HasColumnName("file_checksum");
+
+                            b1.Property<string>("ContentType")
+                                .IsRequired()
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("content_type");
+
+                            b1.Property<string>("FileExtension")
+                                .IsRequired()
+                                .HasMaxLength(10)
+                                .HasColumnType("character varying(10)")
+                                .HasColumnName("file_extension");
+
+                            b1.Property<string>("FileName")
+                                .IsRequired()
+                                .HasMaxLength(255)
+                                .HasColumnType("character varying(255)")
+                                .HasColumnName("file_name");
+
+                            b1.Property<long>("FileSizeBytes")
+                                .HasColumnType("bigint")
+                                .HasColumnName("file_size_bytes");
+
+                            b1.HasKey("AssetVersionId");
+
+                            b1.ToTable("asset_versions", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AssetVersionId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetStorageInfo", "StorageInfo", b1 =>
+                        {
+                            b1.Property<Guid>("AssetVersionId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("CdnUrl")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("cdn_url");
+
+                            b1.Property<string>("QualityUrls")
+                                .IsRequired()
+                                .HasColumnType("jsonb")
+                                .HasColumnName("quality_urls");
+
+                            b1.Property<string>("StoragePath")
+                                .IsRequired()
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("storage_path");
+
+                            b1.Property<string>("StorageProvider")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)")
+                                .HasColumnName("storage_provider");
+
+                            b1.Property<string>("ThumbnailUrl")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("thumbnail_url");
+
+                            b1.HasKey("AssetVersionId");
+
+                            b1.ToTable("asset_versions", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("AssetVersionId");
+                        });
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Dimensions");
+
+                    b.Navigation("FileInfo")
+                        .IsRequired();
+
+                    b.Navigation("StorageInfo")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.CampaignVariant", b =>
+                {
+                    b.HasOne("Event.Domain.Entities.MarketingCampaign", "Campaign")
+                        .WithMany("Variants")
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Event.Domain.Entities.MarketingAsset", null)
+                        .WithMany()
+                        .HasForeignKey("PrimaryAssetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
             modelBuilder.Entity("Event.Domain.Entities.EventAggregate", b =>
                 {
+                    b.HasOne("Event.Domain.Entities.Organization", "Organization")
+                        .WithMany("Events")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Event.Domain.Entities.Promoter", "Promoter")
+                        .WithMany("Events")
+                        .HasForeignKey("PromoterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.OwnsOne("Event.Domain.ValueObjects.DateTimeRange", "PublishWindow", b1 =>
                         {
                             b1.Property<Guid>("EventAggregateId")
@@ -1730,7 +2292,247 @@ namespace Event.Infrastructure.Migrations
                                 .HasForeignKey("EventAggregateId");
                         });
 
+                    b.Navigation("Organization");
+
+                    b.Navigation("Promoter");
+
                     b.Navigation("PublishWindow");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.MarketingAsset", b =>
+                {
+                    b.HasOne("Event.Domain.Entities.AssetCategory", null)
+                        .WithMany("Assets")
+                        .HasForeignKey("AssetCategoryId");
+
+                    b.HasOne("Event.Domain.Entities.AssetCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetDimensions", "Dimensions", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingAssetId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("Height")
+                                .HasColumnType("integer")
+                                .HasColumnName("height");
+
+                            b1.Property<int>("Width")
+                                .HasColumnType("integer")
+                                .HasColumnName("width");
+
+                            b1.HasKey("MarketingAssetId");
+
+                            b1.ToTable("marketing_assets", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingAssetId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetFileInfo", "FileInfo", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingAssetId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Checksum")
+                                .HasMaxLength(64)
+                                .HasColumnType("character varying(64)")
+                                .HasColumnName("file_checksum");
+
+                            b1.Property<string>("ContentType")
+                                .IsRequired()
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("content_type");
+
+                            b1.Property<string>("FileExtension")
+                                .IsRequired()
+                                .HasMaxLength(10)
+                                .HasColumnType("character varying(10)")
+                                .HasColumnName("file_extension");
+
+                            b1.Property<string>("FileName")
+                                .IsRequired()
+                                .HasMaxLength(255)
+                                .HasColumnType("character varying(255)")
+                                .HasColumnName("file_name");
+
+                            b1.Property<long>("FileSizeBytes")
+                                .HasColumnType("bigint")
+                                .HasColumnName("file_size_bytes");
+
+                            b1.HasKey("MarketingAssetId");
+
+                            b1.ToTable("marketing_assets", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingAssetId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetStorageInfo", "StorageInfo", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingAssetId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("CdnUrl")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("cdn_url");
+
+                            b1.Property<string>("QualityUrls")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("quality_urls");
+
+                            b1.Property<string>("StoragePath")
+                                .IsRequired()
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("storage_path");
+
+                            b1.Property<string>("StorageProvider")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)")
+                                .HasColumnName("storage_provider");
+
+                            b1.Property<string>("ThumbnailUrl")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("thumbnail_url");
+
+                            b1.HasKey("MarketingAssetId");
+
+                            b1.ToTable("marketing_assets", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingAssetId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.AssetMetadata", "Metadata", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingAssetId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("AltText")
+                                .HasMaxLength(500)
+                                .HasColumnType("character varying(500)")
+                                .HasColumnName("alt_text");
+
+                            b1.Property<string>("Attribution")
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("attribution");
+
+                            b1.Property<string>("Caption")
+                                .HasMaxLength(1000)
+                                .HasColumnType("character varying(1000)")
+                                .HasColumnName("caption");
+
+                            b1.Property<string>("Copyright")
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)")
+                                .HasColumnName("copyright");
+
+                            b1.Property<string>("Keywords")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("keywords");
+
+                            b1.Property<string>("Properties")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("metadata_properties");
+
+                            b1.HasKey("MarketingAssetId");
+
+                            b1.ToTable("marketing_assets", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingAssetId");
+                        });
+
+                    b.OwnsOne("Event.Domain.ValueObjects.ComplianceValidationResult", "ComplianceResult", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingAssetId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<double>("ComplianceScore")
+                                .HasColumnType("double precision")
+                                .HasColumnName("compliance_score");
+
+                            b1.Property<string>("Status")
+                                .IsRequired()
+                                .HasMaxLength(20)
+                                .HasColumnType("character varying(20)")
+                                .HasColumnName("compliance_status");
+
+                            b1.Property<DateTime>("ValidatedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("compliance_validated_at");
+
+                            b1.Property<string>("ValidatedBy")
+                                .HasMaxLength(100)
+                                .HasColumnType("character varying(100)")
+                                .HasColumnName("compliance_validated_by");
+
+                            b1.Property<string>("Violations")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("compliance_violations");
+
+                            b1.Property<string>("Warnings")
+                                .IsRequired()
+                                .HasColumnType("text")
+                                .HasColumnName("compliance_warnings");
+
+                            b1.HasKey("MarketingAssetId");
+
+                            b1.ToTable("marketing_assets", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingAssetId");
+                        });
+
+                    b.Navigation("ComplianceResult");
+
+                    b.Navigation("Dimensions");
+
+                    b.Navigation("FileInfo")
+                        .IsRequired();
+
+                    b.Navigation("Metadata")
+                        .IsRequired();
+
+                    b.Navigation("StorageInfo")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.MarketingCampaign", b =>
+                {
+                    b.OwnsOne("Event.Domain.ValueObjects.TimeZoneId", "TimeZone", b1 =>
+                        {
+                            b1.Property<Guid>("MarketingCampaignId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Value")
+                                .IsRequired()
+                                .HasMaxLength(50)
+                                .HasColumnType("character varying(50)")
+                                .HasColumnName("time_zone");
+
+                            b1.HasKey("MarketingCampaignId");
+
+                            b1.ToTable("marketing_campaigns", "event");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MarketingCampaignId");
+                        });
+
+                    b.Navigation("TimeZone")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.PricingRule", b =>
@@ -1800,102 +2602,6 @@ namespace Event.Infrastructure.Migrations
                     b.Navigation("MinOrderAmount");
                 });
 
-            modelBuilder.Entity("Event.Domain.Entities.Reservation", b =>
-                {
-                    b.HasOne("Event.Domain.Entities.EventAggregate", "Event")
-                        .WithMany()
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.OwnsOne("Event.Domain.ValueObjects.Money", "DiscountAmount", b1 =>
-                        {
-                            b1.Property<Guid>("ReservationId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<decimal>("Amount")
-                                .HasColumnType("decimal(10,2)")
-                                .HasColumnName("discount_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("discount_currency");
-
-                            b1.HasKey("ReservationId");
-
-                            b1.ToTable("reservations", "event");
-
-                            b1.WithOwner()
-                                .HasForeignKey("ReservationId");
-                        });
-
-                    b.OwnsOne("Event.Domain.ValueObjects.Money", "TotalAmount", b1 =>
-                        {
-                            b1.Property<Guid>("ReservationId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<decimal>("Amount")
-                                .HasColumnType("decimal(10,2)")
-                                .HasColumnName("total_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("currency");
-
-                            b1.HasKey("ReservationId");
-
-                            b1.ToTable("reservations", "event");
-
-                            b1.WithOwner()
-                                .HasForeignKey("ReservationId");
-                        });
-
-                    b.Navigation("DiscountAmount");
-
-                    b.Navigation("Event");
-
-                    b.Navigation("TotalAmount")
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Event.Domain.Entities.ReservationItem", b =>
-                {
-                    b.HasOne("Event.Domain.Entities.Reservation", null)
-                        .WithMany("Items")
-                        .HasForeignKey("ReservationId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.OwnsOne("Event.Domain.ValueObjects.Money", "UnitPrice", b1 =>
-                        {
-                            b1.Property<Guid>("ReservationItemId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<decimal>("Amount")
-                                .HasColumnType("decimal(10,2)")
-                                .HasColumnName("unit_price_amount");
-
-                            b1.Property<string>("Currency")
-                                .IsRequired()
-                                .HasMaxLength(3)
-                                .HasColumnType("character varying(3)")
-                                .HasColumnName("unit_price_currency");
-
-                            b1.HasKey("ReservationItemId");
-
-                            b1.ToTable("reservation_items", "event");
-
-                            b1.WithOwner()
-                                .HasForeignKey("ReservationItemId");
-                        });
-
-                    b.Navigation("UnitPrice")
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Event.Domain.Entities.Seat", b =>
                 {
                     b.HasOne("Event.Domain.Entities.Venue", "Venue")
@@ -1939,6 +2645,25 @@ namespace Event.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Venue");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.SeatAllocation", b =>
+                {
+                    b.HasOne("Event.Domain.Entities.Allocation", "Allocation")
+                        .WithMany("AllocatedSeats")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Event.Domain.Entities.Seat", "Seat")
+                        .WithMany()
+                        .HasForeignKey("SeatId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+
+                    b.Navigation("Seat");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.TicketType", b =>
@@ -2023,9 +2748,17 @@ namespace Event.Infrastructure.Migrations
                             b1.Property<Guid>("TicketTypeId")
                                 .HasColumnType("uuid");
 
-                            b1.Property<int>("Available")
+                            b1.Property<int>("Held")
+                                .ValueGeneratedOnAdd()
                                 .HasColumnType("integer")
-                                .HasColumnName("available_capacity");
+                                .HasDefaultValue(0)
+                                .HasColumnName("held_capacity");
+
+                            b1.Property<int>("Sold")
+                                .ValueGeneratedOnAdd()
+                                .HasColumnType("integer")
+                                .HasDefaultValue(0)
+                                .HasColumnName("sold_capacity");
 
                             b1.Property<int>("Total")
                                 .HasColumnType("integer")
@@ -2133,18 +2866,43 @@ namespace Event.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Event.Domain.Entities.Allocation", b =>
+                {
+                    b.Navigation("AllocatedSeats");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.AssetCategory", b =>
+                {
+                    b.Navigation("Assets");
+
+                    b.Navigation("Children");
+                });
+
             modelBuilder.Entity("Event.Domain.Entities.EventAggregate", b =>
                 {
-                    b.Navigation("Allocations");
-
                     b.Navigation("PricingRules");
 
                     b.Navigation("TicketTypes");
                 });
 
-            modelBuilder.Entity("Event.Domain.Entities.Reservation", b =>
+            modelBuilder.Entity("Event.Domain.Entities.MarketingAsset", b =>
                 {
-                    b.Navigation("Items");
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.MarketingCampaign", b =>
+                {
+                    b.Navigation("Variants");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.Organization", b =>
+                {
+                    b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("Event.Domain.Entities.Promoter", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("Event.Domain.Entities.Venue", b =>

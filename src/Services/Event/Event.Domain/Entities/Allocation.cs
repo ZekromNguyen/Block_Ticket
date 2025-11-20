@@ -1,5 +1,4 @@
 using Event.Domain.Enums;
-using Event.Domain.Events;
 using Event.Domain.Exceptions;
 using Event.Domain.ValueObjects;
 using Shared.Common.Models;
@@ -7,298 +6,326 @@ using Shared.Common.Models;
 namespace Event.Domain.Entities;
 
 /// <summary>
-/// Represents an allocation of tickets/seats for specific purposes
+/// Represents an allocation of tickets or seats for specific purposes
+/// (promoter holds, artist holds, presale allocations, etc.)
 /// </summary>
 public class Allocation : BaseAuditableEntity
 {
-    private readonly List<Guid> _allocatedSeatIds = new();
-
+    private readonly List<SeatAllocation> _allocatedSeats = new();
     // Basic Properties
     public Guid EventId { get; private set; }
     public Guid? TicketTypeId { get; private set; }
+    public AllocationType Type { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string? Description { get; private set; }
-    public AllocationType Type { get; private set; }
-    
-    // Capacity
-    public int TotalQuantity { get; private set; }
-    public int AllocatedQuantity { get; private set; }
+    public AllocationScope Scope { get; private set; }
+
+    // Allocation Details
+    private int _quantity;
+    public int Quantity
+    {
+        get => Scope == AllocationScope.ByQuantity ? _quantity : _allocatedSeats.Count;
+        private set => _quantity = value;
+    }
     public int UsedQuantity { get; private set; }
-    
+    public int RemainingQuantity => Quantity - UsedQuantity;
+
     // Access Control
     public string? AccessCode { get; private set; }
-    public List<string>? AllowedUserIds { get; private set; }
-    public List<string>? AllowedEmailDomains { get; private set; }
-    
-    // Timing
-    public DateTime? AvailableFrom { get; private set; }
-    public DateTime? AvailableUntil { get; private set; }
-    public DateTime? ExpiresAt { get; private set; }
-    
-    // Status
-    public bool IsActive { get; private set; }
-    public bool IsExpired => ExpiresAt.HasValue && DateTime.UtcNow > ExpiresAt.Value;
+    public bool RequiresAccessCode => !string.IsNullOrEmpty(AccessCode);
+    public List<string> AllowedCustomerSegments { get; private set; } = new();
 
-    // Compatibility properties for Application layer
-    public int Quantity => TotalQuantity;
-    
+    // Time Windows
+    public DateTime? StartTime { get; private set; }
+    public DateTime? EndTime { get; private set; }
+    public bool IsActive => IsWithinTimeWindow() && RemainingQuantity > 0;
+
+    // Capacity Limits
+    public int? MaxPerCustomer { get; private set; }
+    public int? MinPerCustomer { get; private set; }
+
+    // Status and Metadata
+    public bool IsEnabled { get; private set; } = true;
+    public int Priority { get; private set; } = 0; // Higher number = higher priority
+    public Dictionary<string, object> Metadata { get; private set; } = new();
+
     // Navigation Properties
-    public IReadOnlyCollection<Guid> AllocatedSeatIds => _allocatedSeatIds.AsReadOnly();
+    public IReadOnlyCollection<SeatAllocation> AllocatedSeats => _allocatedSeats.AsReadOnly();
     public EventAggregate Event { get; private set; } = null!;
     public TicketType? TicketType { get; private set; }
 
     // For EF Core
     private Allocation() { }
 
-    public Allocation(
+    private Allocation(
         Guid eventId,
-        string name,
         AllocationType type,
-        int totalQuantity,
-        Guid? ticketTypeId = null,
-        string? description = null)
+        string name,
+        Guid? ticketTypeId,
+        string? description,
+        string? accessCode,
+        DateTime? startTime,
+        DateTime? endTime,
+        int? maxPerCustomer,
+        int? minPerCustomer,
+        int priority)
     {
-        if (string.IsNullOrWhiteSpace(name))
-            throw new InventoryDomainException("Allocation name cannot be empty");
-        
-        if (totalQuantity <= 0)
-            throw new InventoryDomainException("Allocation quantity must be greater than zero");
+        if (maxPerCustomer.HasValue && maxPerCustomer.Value <= 0)
+            throw new AllocationDomainException("Max per customer must be greater than zero");
+
+        if (minPerCustomer.HasValue && minPerCustomer.Value <= 0)
+            throw new AllocationDomainException("Min per customer must be greater than zero");
+
+        if (maxPerCustomer.HasValue && minPerCustomer.HasValue && minPerCustomer.Value > maxPerCustomer.Value)
+            throw new AllocationDomainException("Min per customer cannot be greater than max per customer");
+
+        if (startTime.HasValue && endTime.HasValue && startTime.Value >= endTime.Value)
+            throw new AllocationDomainException("Start time must be before end time");
 
         EventId = eventId;
         TicketTypeId = ticketTypeId;
-        Name = name.Trim();
-        Description = description?.Trim();
         Type = type;
-        TotalQuantity = totalQuantity;
-        AllocatedQuantity = 0;
+        Name = name?.Trim() ?? throw new ArgumentNullException(nameof(name));
+        Description = description?.Trim();
         UsedQuantity = 0;
-        IsActive = true;
+        AccessCode = accessCode?.Trim();
+        StartTime = startTime;
+        EndTime = endTime;
+        MaxPerCustomer = maxPerCustomer;
+        MinPerCustomer = minPerCustomer;
+        Priority = priority;
     }
 
-    public void UpdateBasicInfo(string name, string? description)
+    public Allocation(
+        Guid eventId,
+        AllocationType type,
+        string name,
+        int quantity,
+        Guid? ticketTypeId = null,
+        string? description = null,
+        string? accessCode = null,
+        DateTime? startTime = null,
+        DateTime? endTime = null,
+        int? maxPerCustomer = null,
+        int? minPerCustomer = null,
+        int priority = 0)
+        : this(eventId, type, name, ticketTypeId, description, accessCode, startTime, endTime, maxPerCustomer, minPerCustomer, priority)
+    {
+        if (quantity <= 0)
+            throw new AllocationDomainException("Allocation quantity must be greater than zero");
+
+        Scope = AllocationScope.ByQuantity;
+        Quantity = quantity;
+    }
+
+    public Allocation(
+        Guid eventId,
+        AllocationType type,
+        string name,
+        IEnumerable<Seat> seats,
+        Guid? ticketTypeId = null,
+        string? description = null,
+        string? accessCode = null,
+        DateTime? startTime = null,
+        DateTime? endTime = null,
+        int? maxPerCustomer = null,
+        int? minPerCustomer = null,
+        int priority = 0)
+        : this(eventId, type, name, ticketTypeId, description, accessCode, startTime, endTime, maxPerCustomer, minPerCustomer, priority)
+    {
+        Scope = AllocationScope.BySeat;
+        _allocatedSeats = seats.Select(s => new SeatAllocation(Id, s.Id)).ToList();
+    }
+
+    public void UpdateDetails(
+        string name,
+        string? description = null,
+        int? maxPerCustomer = null,
+        int? minPerCustomer = null,
+        int priority = 0)
     {
         if (string.IsNullOrWhiteSpace(name))
-            throw new InventoryDomainException("Allocation name cannot be empty");
+            throw new AllocationDomainException("Allocation name cannot be empty");
+
+        if (maxPerCustomer.HasValue && maxPerCustomer.Value <= 0)
+            throw new AllocationDomainException("Max per customer must be greater than zero");
+
+        if (minPerCustomer.HasValue && minPerCustomer.Value <= 0)
+            throw new AllocationDomainException("Min per customer must be greater than zero");
+
+        if (maxPerCustomer.HasValue && minPerCustomer.HasValue && minPerCustomer.Value > maxPerCustomer.Value)
+            throw new AllocationDomainException("Min per customer cannot be greater than max per customer");
 
         Name = name.Trim();
         Description = description?.Trim();
+        MaxPerCustomer = maxPerCustomer;
+        MinPerCustomer = minPerCustomer;
+        Priority = priority;
     }
 
-    public void SetAccessCode(string accessCode)
+    public void UpdateQuantity(int newQuantity)
     {
-        if (string.IsNullOrWhiteSpace(accessCode))
-            throw new InventoryDomainException("Access code cannot be empty");
+        if (Scope != AllocationScope.ByQuantity)
+            throw new AllocationDomainException("Cannot update quantity for a seat-based allocation.");
 
-        AccessCode = accessCode.Trim().ToUpperInvariant();
+        if (newQuantity <= 0)
+            throw new AllocationDomainException("Allocation quantity must be greater than zero");
+
+        if (newQuantity < UsedQuantity)
+            throw new AllocationDomainException($"Cannot reduce quantity below used quantity ({UsedQuantity})");
+
+        Quantity = newQuantity;
     }
 
-    public void RemoveAccessCode()
+    public void AddSeat(Seat seat)
     {
-        AccessCode = null;
+        if (Scope != AllocationScope.BySeat)
+            throw new AllocationDomainException("Cannot add seats to a quantity-based allocation.");
+
+        if (_allocatedSeats.Any(sa => sa.SeatId == seat.Id))
+            return; // Seat already in allocation
+
+        _allocatedSeats.Add(new SeatAllocation(Id, seat.Id));
     }
 
-    public void SetAllowedUsers(List<string> userIds)
+    public void RemoveSeat(Seat seat)
     {
-        AllowedUserIds = userIds?.Any() == true ? userIds : null;
-    }
+        if (Scope != AllocationScope.BySeat)
+            throw new AllocationDomainException("Cannot remove seats from a quantity-based allocation.");
 
-    public void SetAllowedEmailDomains(List<string> domains)
-    {
-        AllowedEmailDomains = domains?.Any() == true ? 
-            domains.Select(d => d.Trim().ToLowerInvariant()).ToList() : null;
-    }
-
-    public void SetAvailabilityWindow(DateTime? availableFrom, DateTime? availableUntil)
-    {
-        if (availableFrom.HasValue && availableUntil.HasValue && availableUntil.Value <= availableFrom.Value)
-            throw new InventoryDomainException("Available until date must be after available from date");
-
-        AvailableFrom = availableFrom;
-        AvailableUntil = availableUntil;
-    }
-
-    public void SetExpiration(DateTime expiresAt)
-    {
-        if (expiresAt <= DateTime.UtcNow)
-            throw new InventoryDomainException("Expiration date must be in the future");
-
-        ExpiresAt = expiresAt;
-    }
-
-    public void RemoveExpiration()
-    {
-        ExpiresAt = null;
-    }
-
-    public void AllocateSeats(List<Guid> seatIds)
-    {
-        if (!IsActive)
-            throw new InventoryDomainException("Cannot allocate seats to inactive allocation");
-        
-        if (IsExpired)
-            throw new InventoryDomainException("Cannot allocate seats to expired allocation");
-
-        var newAllocations = seatIds.Where(id => !_allocatedSeatIds.Contains(id)).ToList();
-        
-        if (AllocatedQuantity + newAllocations.Count > TotalQuantity)
-            throw new CapacityExceededException(newAllocations.Count, TotalQuantity - AllocatedQuantity);
-
-        foreach (var seatId in newAllocations)
+        var seatAllocation = _allocatedSeats.FirstOrDefault(sa => sa.SeatId == seat.Id);
+        if (seatAllocation != null)
         {
-            _allocatedSeatIds.Add(seatId);
+            _allocatedSeats.Remove(seatAllocation);
+        }
+    }
+
+    public void UpdateTimeWindow(DateTime? startTime, DateTime? endTime)
+    {
+        if (startTime.HasValue && endTime.HasValue && startTime.Value >= endTime.Value)
+            throw new AllocationDomainException("Start time must be before end time");
+
+        StartTime = startTime;
+        EndTime = endTime;
+    }
+
+    public void SetAccessCode(string? accessCode)
+    {
+        AccessCode = accessCode?.Trim();
+    }
+
+    public void SetAllowedCustomerSegments(List<string> segments)
+    {
+        AllowedCustomerSegments = segments?.Where(s => !string.IsNullOrWhiteSpace(s))
+                                          .Select(s => s.Trim())
+                                          .Distinct()
+                                          .ToList() ?? new List<string>();
+    }
+
+    public void Enable()
+    {
+        IsEnabled = true;
+    }
+
+    public void Disable()
+    {
+        IsEnabled = false;
+    }
+
+    public bool IsWithinTimeWindow()
+    {
+        var now = DateTime.UtcNow;
+
+        if (StartTime.HasValue && now < StartTime.Value)
+            return false;
+
+        if (EndTime.HasValue && now > EndTime.Value)
+            return false;
+
+        return true;
+    }
+
+    public bool IsAvailableForCustomer(string? customerSegment = null)
+    {
+        if (!IsEnabled || !IsWithinTimeWindow() || RemainingQuantity <= 0)
+            return false;
+
+        // Check customer segment restrictions
+        if (AllowedCustomerSegments.Any() && !string.IsNullOrEmpty(customerSegment))
+        {
+            return AllowedCustomerSegments.Contains(customerSegment, StringComparer.OrdinalIgnoreCase);
         }
 
-        AllocatedQuantity = _allocatedSeatIds.Count;
+        return true;
     }
 
-    public void DeallocateSeats(List<Guid> seatIds)
+    public bool ValidateAccessCode(string? providedCode)
     {
-        foreach (var seatId in seatIds)
-        {
-            _allocatedSeatIds.Remove(seatId);
-        }
+        if (!RequiresAccessCode)
+            return true;
 
-        AllocatedQuantity = _allocatedSeatIds.Count;
-    }
-
-    public void ClearSeatAllocations()
-    {
-        _allocatedSeatIds.Clear();
-        AllocatedQuantity = 0;
+        return string.Equals(AccessCode, providedCode, StringComparison.Ordinal);
     }
 
     public void UseQuantity(int quantity)
     {
         if (quantity <= 0)
-            throw new InventoryDomainException("Usage quantity must be greater than zero");
-        
-        if (UsedQuantity + quantity > AllocatedQuantity)
-            throw new InventoryDomainException("Cannot use more than allocated quantity");
+            throw new AllocationDomainException("Usage quantity must be greater than zero");
+
+        if (quantity > RemainingQuantity)
+            throw new AllocationDomainException($"Cannot use {quantity} tickets. Only {RemainingQuantity} remaining");
 
         UsedQuantity += quantity;
     }
 
-    public void ReleaseUsedQuantity(int quantity)
+    public void ReleaseQuantity(int quantity)
     {
         if (quantity <= 0)
-            throw new InventoryDomainException("Release quantity must be greater than zero");
-        
-        UsedQuantity = Math.Max(0, UsedQuantity - quantity);
+            throw new AllocationDomainException("Release quantity must be greater than zero");
+
+        if (quantity > UsedQuantity)
+            throw new AllocationDomainException($"Cannot release {quantity} tickets. Only {UsedQuantity} used");
+
+        UsedQuantity -= quantity;
     }
 
-    public void AdjustTotalQuantity(int newTotalQuantity)
+    public void SetMetadata(Dictionary<string, object> metadata)
     {
-        if (newTotalQuantity < UsedQuantity)
-            throw new InventoryDomainException($"Cannot reduce total quantity below used quantity ({UsedQuantity})");
-        
-        if (newTotalQuantity < AllocatedQuantity)
+        Metadata = metadata ?? new Dictionary<string, object>();
+    }
+
+    public void AddMetadata(string key, object value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Metadata key cannot be empty", nameof(key));
+
+        Metadata[key] = value;
+    }
+
+    public void RemoveMetadata(string key)
+    {
+        if (!string.IsNullOrWhiteSpace(key))
         {
-            // Need to deallocate some seats
-            var excessSeats = AllocatedQuantity - newTotalQuantity;
-            var seatsToRemove = _allocatedSeatIds.Take(excessSeats).ToList();
-            DeallocateSeats(seatsToRemove);
-        }
-
-        TotalQuantity = newTotalQuantity;
-    }
-
-    public void Activate()
-    {
-        IsActive = true;
-    }
-
-    public void Deactivate()
-    {
-        IsActive = false;
-    }
-
-    public void Expire()
-    {
-        if (!IsExpired)
-        {
-            ExpiresAt = DateTime.UtcNow;
-            AddDomainEvent(new HoldExpiredDomainEvent(EventId, Id, GetAvailableQuantity(), DateTime.UtcNow));
+            Metadata.Remove(key);
         }
     }
 
-    public bool IsAvailableNow()
+    public string GetStatusDescription()
     {
-        if (!IsActive || IsExpired)
-            return false;
+        if (!IsEnabled)
+            return "Disabled";
 
-        var now = DateTime.UtcNow;
-        
-        if (AvailableFrom.HasValue && now < AvailableFrom.Value)
-            return false;
-        
-        if (AvailableUntil.HasValue && now > AvailableUntil.Value)
-            return false;
-
-        return true;
-    }
-
-    public bool CanAccess(string? accessCode, string? userId, string? userEmail)
-    {
-        if (!IsAvailableNow())
-            return false;
-
-        // Check access code
-        if (!string.IsNullOrWhiteSpace(AccessCode))
+        if (!IsWithinTimeWindow())
         {
-            if (string.IsNullOrWhiteSpace(accessCode) || 
-                !AccessCode.Equals(accessCode.Trim(), StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (StartTime.HasValue && DateTime.UtcNow < StartTime.Value)
+                return "Not Started";
+            if (EndTime.HasValue && DateTime.UtcNow > EndTime.Value)
+                return "Expired";
         }
 
-        // Check allowed users
-        if (AllowedUserIds?.Any() == true && !string.IsNullOrWhiteSpace(userId))
-        {
-            if (!AllowedUserIds.Contains(userId))
-                return false;
-        }
+        if (RemainingQuantity <= 0)
+            return "Fully Used";
 
-        // Check allowed email domains
-        if (AllowedEmailDomains?.Any() == true && !string.IsNullOrWhiteSpace(userEmail))
-        {
-            var emailDomain = userEmail.Split('@').LastOrDefault()?.ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(emailDomain) || !AllowedEmailDomains.Contains(emailDomain))
-                return false;
-        }
-
-        return true;
-    }
-
-    public int GetAvailableQuantity()
-    {
-        return AllocatedQuantity - UsedQuantity;
-    }
-
-    public int GetRemainingCapacity()
-    {
-        return TotalQuantity - AllocatedQuantity;
-    }
-
-    public decimal GetUtilizationPercentage()
-    {
-        return TotalQuantity == 0 ? 0 : (decimal)UsedQuantity / TotalQuantity * 100;
-    }
-
-    public bool HasAvailableQuantity(int requestedQuantity = 1)
-    {
-        return IsAvailableNow() && GetAvailableQuantity() >= requestedQuantity;
-    }
-
-    public bool IsSeatAllocated(Guid seatId)
-    {
-        return _allocatedSeatIds.Contains(seatId);
-    }
-
-    public TimeSpan? GetRemainingTime()
-    {
-        if (!ExpiresAt.HasValue)
-            return null;
-        
-        var remaining = ExpiresAt.Value - DateTime.UtcNow;
-        return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
+        return "Active";
     }
 }

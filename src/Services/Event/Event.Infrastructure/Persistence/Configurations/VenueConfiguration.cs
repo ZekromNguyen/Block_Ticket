@@ -43,7 +43,7 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
             .HasDefaultValue(false);
 
         builder.Property(v => v.SeatMapMetadata)
-            .HasColumnType("jsonb");
+;
 
         builder.Property(v => v.SeatMapChecksum)
             .HasMaxLength(64);
@@ -57,11 +57,7 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
         // Relationships
         ConfigureRelationships(builder);
 
-        // Indexes
-        ConfigureIndexes(builder);
 
-        // Constraints
-        ConfigureConstraints(builder);
     }
 
     private static void ConfigureAddress(EntityTypeBuilder<Venue> builder)
@@ -127,50 +123,5 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
             .OnDelete(DeleteBehavior.Cascade);
     }
 
-    private static void ConfigureIndexes(EntityTypeBuilder<Venue> builder)
-    {
-        // Performance indexes
-        builder.HasIndex(v => v.Name)
-            .HasDatabaseName("IX_Venues_Name");
 
-        // Note: Address-based indexes will be handled at database level
-        // EF Core has limitations with value object properties in indexes
-
-        // Note: Geospatial indexes will be handled at database level
-
-        // Seat map indexes
-        builder.HasIndex(v => v.HasSeatMap)
-            .HasDatabaseName("IX_Venues_HasSeatMap");
-
-        builder.HasIndex(v => v.SeatMapLastUpdated)
-            .HasFilter("\"SeatMapLastUpdated\" IS NOT NULL")
-            .HasDatabaseName("IX_Venues_SeatMapLastUpdated");
-
-        // Capacity index for filtering
-        builder.HasIndex(v => v.TotalCapacity)
-            .HasDatabaseName("IX_Venues_TotalCapacity");
-    }
-
-    private static void ConfigureConstraints(EntityTypeBuilder<Venue> builder)
-    {
-        // Check constraints for business rules
-        builder.HasCheckConstraint("CK_Venues_Capacity_Positive",
-            "\"TotalCapacity\" > 0");
-
-        builder.HasCheckConstraint("CK_Venues_Coordinates_Valid",
-            "(latitude IS NULL AND longitude IS NULL) OR " +
-            "(latitude IS NOT NULL AND longitude IS NOT NULL AND " +
-            "latitude >= -90 AND latitude <= 90 AND " +
-            "longitude >= -180 AND longitude <= 180)");
-
-        builder.HasCheckConstraint("CK_Venues_Email_Format",
-            "\"ContactEmail\" IS NULL OR \"ContactEmail\" ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'");
-
-        builder.HasCheckConstraint("CK_Venues_Website_Format",
-            "\"Website\" IS NULL OR \"Website\" ~ '^https?://'");
-
-        builder.HasCheckConstraint("CK_Venues_SeatMap_Consistency",
-            "(\"HasSeatMap\" = false AND \"SeatMapMetadata\" IS NULL AND \"SeatMapChecksum\" IS NULL AND \"SeatMapLastUpdated\" IS NULL) OR " +
-            "(\"HasSeatMap\" = true AND \"SeatMapMetadata\" IS NOT NULL AND \"SeatMapChecksum\" IS NOT NULL AND \"SeatMapLastUpdated\" IS NOT NULL)");
-    }
 }

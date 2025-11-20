@@ -195,13 +195,11 @@ public record SeatDto
     public string Section { get; init; } = string.Empty;
     public string Row { get; init; } = string.Empty;
     public string Number { get; init; } = string.Empty;
-    public string Status { get; init; } = string.Empty; // Available, Blocked, Reserved, Confirmed
+    public string Status { get; init; } = string.Empty; // Available, Blocked (reservations managed by Ticket Service)
     public bool IsAccessible { get; init; }
     public bool HasRestrictedView { get; init; }
     public string? PriceCategory { get; init; }
     public string? Notes { get; init; }
-    public Guid? CurrentReservationId { get; init; }
-    public DateTime? ReservedUntil { get; init; }
     public Guid? AllocatedToTicketTypeId { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }

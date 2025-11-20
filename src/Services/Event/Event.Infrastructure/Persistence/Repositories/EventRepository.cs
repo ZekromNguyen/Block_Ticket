@@ -25,7 +25,6 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
         return await DbSet
             .Include(e => e.TicketTypes)
             .Include(e => e.PricingRules)
-            .Include(e => e.Allocations)
             .FirstOrDefaultAsync(e => e.Slug == slug && e.OrganizationId == organizationId, cancellationToken);
     }
 
@@ -40,7 +39,7 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
     public async Task<IEnumerable<EventAggregate>> GetPublishedEventsAsync(CancellationToken cancellationToken = default)
     {
         return await DbSet
-            .Where(e => e.Status == EventStatus.Published || e.Status == EventStatus.OnSale)
+            .Where(e => e.Status == EventStatus.Published)
             .OrderBy(e => e.EventDate)
             .ToListAsync(cancellationToken);
     }
@@ -58,14 +57,15 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
         int take = 20,
         CancellationToken cancellationToken = default)
     {
-        var query = GetQueryableNoTracking()
+        var query = DbSet
             .Include(e => e.TicketTypes)
-            .Where(e => e.Status == EventStatus.Published || e.Status == EventStatus.OnSale);
+            .Where(e => e.Status == EventStatus.Published);
 
         // Text search using PostgreSQL full-text search
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
-            query = query.Where(e => e.SearchVector.Matches(EF.Functions.ToTsQuery("english", searchTerm)));
+            var lowerSearchTerm = searchTerm.ToLower();
+            query = query.Where(e => e.Title.ToLower().Contains(lowerSearchTerm) || (e.Description != null && e.Description.ToLower().Contains(lowerSearchTerm)));
         }
 
         // Date range filter
@@ -156,7 +156,7 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
         
         return await DbSet
             .Where(e => e.EventDate >= DateTime.UtcNow && e.EventDate <= cutoffDate)
-            .Where(e => e.Status == EventStatus.Published || e.Status == EventStatus.OnSale)
+            .Where(e => e.Status == EventStatus.Published)
             .OrderBy(e => e.EventDate)
             .ToListAsync(cancellationToken);
     }
@@ -182,7 +182,6 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
         return await DbSet
             .Include(e => e.TicketTypes)
             .Include(e => e.PricingRules)
-            .Include(e => e.Allocations)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
@@ -204,7 +203,7 @@ public class EventRepository : OrganizationAwareRepository<EventAggregate>, IEve
 
         return await DbSet
             .Where(e => e.EventDate < now)
-            .Where(e => e.Status == EventStatus.OnSale || e.Status == EventStatus.SoldOut)
+            .Where(e => e.Status == EventStatus.Published)
             .ToListAsync(cancellationToken);
     }
 

@@ -120,7 +120,7 @@ public class TicketTypeConfiguration : IEntityTypeConfiguration<TicketType>
         });
     }
 
-    private static void ConfigureCapacity(EntityTypeBuilder<TicketType> builder)
+        private static void ConfigureCapacity(EntityTypeBuilder<TicketType> builder)
     {
         builder.OwnsOne(t => t.Capacity, capacity =>
         {
@@ -128,11 +128,18 @@ public class TicketTypeConfiguration : IEntityTypeConfiguration<TicketType>
                 .HasColumnName("total_capacity")
                 .IsRequired();
 
-            capacity.Property(c => c.Available)
-                .HasColumnName("available_capacity")
-                .IsRequired();
+            capacity.Property(c => c.Held)
+                .HasColumnName("held_capacity")
+                .IsRequired()
+                .HasDefaultValue(0);
 
-            // Computed property for reserved capacity
+            capacity.Property(c => c.Sold)
+                .HasColumnName("sold_capacity")
+                .IsRequired()
+                .HasDefaultValue(0);
+
+            // Ignore computed properties
+            capacity.Ignore(c => c.Available);
             capacity.Ignore(c => c.Reserved);
         });
     }
@@ -176,7 +183,7 @@ public class TicketTypeConfiguration : IEntityTypeConfiguration<TicketType>
 
         // Partial index for available tickets
         builder.HasIndex(t => new { t.EventId, t.IsVisible })
-            .HasFilter("available_capacity > 0 AND \"IsVisible\" = true")
+            .HasFilter("(total_capacity - held_capacity - sold_capacity) > 0 AND \"IsVisible\" = true")
             .HasDatabaseName("IX_TicketTypes_Available");
     }
 

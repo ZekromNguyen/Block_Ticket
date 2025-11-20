@@ -69,6 +69,5 @@ public interface IIntegrationEventPublisher
     Task PublishEventPublishedAsync(Guid eventId, string eventName, DateTime publishedAt, DateTime eventDate, CancellationToken cancellationToken = default);
     Task PublishEventCancelledAsync(Guid eventId, string eventName, DateTime cancelledAt, string reason, CancellationToken cancellationToken = default);
     Task PublishInventoryChangedAsync(Guid eventId, Guid? ticketTypeId, int previousQuantity, int newQuantity, string reason, CancellationToken cancellationToken = default);
-    Task PublishReservationCreatedAsync(Guid reservationId, Guid eventId, Guid userId, List<Guid> seatIds, DateTime expiresAt, CancellationToken cancellationToken = default);
-    Task PublishReservationConfirmedAsync(Guid reservationId, Guid eventId, Guid userId, List<Guid> seatIds, decimal totalAmount, CancellationToken cancellationToken = default);
+    // Note: Reservation events moved to Ticketing Service
 }

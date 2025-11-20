@@ -9,6 +9,7 @@ public class User : BaseAuditableEntity
     private readonly List<UserSession> _sessions = new();
     private readonly List<MfaDevice> _mfaDevices = new();
     private readonly List<UserRole> _userRoles = new();
+    private readonly List<PasswordHistory> _passwordHistory = new();
 
     public Email Email { get; private set; } = null!;
     public string FirstName { get; private set; } = string.Empty;
@@ -28,6 +29,7 @@ public class User : BaseAuditableEntity
     public IReadOnlyCollection<UserSession> Sessions => _sessions.AsReadOnly();
     public IReadOnlyCollection<MfaDevice> MfaDevices => _mfaDevices.AsReadOnly();
     public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
+    public IReadOnlyCollection<PasswordHistory> PasswordHistory => _passwordHistory.AsReadOnly();
 
     private User() { } // For EF Core
 
@@ -72,9 +74,20 @@ public class User : BaseAuditableEntity
     public void ChangePassword(string newPasswordHash)
     {
         PasswordHash = newPasswordHash;
+        _passwordHistory.Add(new PasswordHistory(Id, newPasswordHash));
         UpdatedAt = DateTime.UtcNow;
 
         AddDomainEvent(new UserPasswordChangedDomainEvent(Id));
+    }
+
+    public void ChangePasswordWithHistory(string newPasswordHash, int historyLimit)
+    {
+        if (_passwordHistory.OrderByDescending(p => p.CreatedAt).Take(historyLimit).Any(p => p.PasswordHash == newPasswordHash))
+        {
+            throw new InvalidOperationException("New password cannot be the same as recent passwords.");
+        }
+
+        ChangePassword(newPasswordHash);
     }
 
     public void RecordSuccessfulLogin()

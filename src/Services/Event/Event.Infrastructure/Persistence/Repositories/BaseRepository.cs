@@ -26,7 +26,7 @@ public abstract class BaseRepository<T> : IRepository<T> where T : BaseEntity
     /// </summary>
     public virtual async Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await DbSet.FindAsync(new object[] { id }, cancellationToken);
+        return await DbSet.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public abstract class BaseRepository<T> : IRepository<T> where T : BaseEntity
     /// </summary>
     public virtual void Update(T entity)
     {
-        DbSet.Update(entity);
+        Context.Entry(entity).State = EntityState.Modified;
     }
 
     /// <summary>

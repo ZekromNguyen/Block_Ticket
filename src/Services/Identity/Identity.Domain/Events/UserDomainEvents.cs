@@ -1,3 +1,4 @@
+using MediatR;
 using Shared.Common.Models;
 
 namespace Identity.Domain.Events;
@@ -8,19 +9,19 @@ public record UserEmailConfirmedDomainEvent(Guid UserId, string Email) : IDomain
 
 public record UserProfileUpdatedDomainEvent(Guid UserId, string FirstName, string LastName) : IDomainEvent;
 
-public record UserPasswordChangedDomainEvent(Guid UserId) : IDomainEvent;
+public record UserPasswordChangedDomainEvent(Guid UserId) : IDomainEvent, INotification;
 
-public record UserLoggedInDomainEvent(Guid UserId, string Email, DateTime LoginAt) : IDomainEvent;
+public record UserLoggedInDomainEvent(Guid UserId, string Email, DateTime LoginAt) : IDomainEvent, INotification;
 
-public record UserLoginFailedDomainEvent(Guid UserId, string Email, int FailedAttempts) : IDomainEvent;
+public record UserLoginFailedDomainEvent(Guid UserId, string Email, int FailedAttempts) : IDomainEvent, INotification;
 
-public record UserAccountLockedDomainEvent(Guid UserId, string Email, DateTime LockedUntil) : IDomainEvent;
+public record UserAccountLockedDomainEvent(Guid UserId, string Email, DateTime LockedUntil) : IDomainEvent, INotification;
 
-public record UserAccountUnlockedDomainEvent(Guid UserId, string Email) : IDomainEvent;
+public record UserAccountUnlockedDomainEvent(Guid UserId, string Email) : IDomainEvent, INotification;
 
-public record UserMfaEnabledDomainEvent(Guid UserId, string Email) : IDomainEvent;
+public record UserMfaEnabledDomainEvent(Guid UserId, string Email) : IDomainEvent, INotification;
 
-public record UserMfaDisabledDomainEvent(Guid UserId, string Email) : IDomainEvent;
+public record UserMfaDisabledDomainEvent(Guid UserId, string Email) : IDomainEvent, INotification;
 
 public record UserMfaDeviceAddedDomainEvent(Guid UserId, string DeviceType) : IDomainEvent;
 

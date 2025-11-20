@@ -20,7 +20,8 @@ public class RoleRepository : IRoleRepository
     public async Task<Role?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .Include(r => r.UserRoles)
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
@@ -28,7 +29,8 @@ public class RoleRepository : IRoleRepository
     public async Task<Role?> GetByNameAsync(string name, CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .Include(r => r.UserRoles)
             .FirstOrDefaultAsync(r => r.Name == name, cancellationToken);
     }
@@ -36,7 +38,8 @@ public class RoleRepository : IRoleRepository
     public async Task<IEnumerable<Role>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .OrderBy(r => r.Name)
             .ToListAsync(cancellationToken);
     }
@@ -44,7 +47,8 @@ public class RoleRepository : IRoleRepository
     public async Task<IEnumerable<Role>> GetActiveRolesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .Where(r => r.IsActive)
             .OrderByDescending(r => r.Priority)
             .ThenBy(r => r.Name)
@@ -54,7 +58,8 @@ public class RoleRepository : IRoleRepository
     public async Task<IEnumerable<Role>> GetSystemRolesAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .Where(r => r.IsSystemRole)
             .OrderByDescending(r => r.Priority)
             .ThenBy(r => r.Name)
@@ -64,7 +69,8 @@ public class RoleRepository : IRoleRepository
     public async Task<IEnumerable<Role>> GetByTypeAsync(RoleType type, CancellationToken cancellationToken = default)
     {
         return await _context.Roles
-            .Include(r => r.Permissions)
+            .Include(r => r.RolePermissions)
+                .ThenInclude(rp => rp.Permission)
             .Where(r => r.Type == type)
             .OrderByDescending(r => r.Priority)
             .ThenBy(r => r.Name)
@@ -75,7 +81,8 @@ public class RoleRepository : IRoleRepository
     {
         return await _context.UserRoles
             .Include(ur => ur.Role)
-                .ThenInclude(r => r.Permissions)
+                .ThenInclude(r => r.RolePermissions)
+                    .ThenInclude(rp => rp.Permission)
             .Where(ur => ur.UserId == userId && ur.IsValid())
             .Select(ur => ur.Role)
             .OrderByDescending(r => r.Priority)

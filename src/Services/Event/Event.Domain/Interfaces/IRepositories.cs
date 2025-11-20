@@ -1,5 +1,6 @@
 using Event.Domain.Entities;
 using Event.Domain.Models;
+using Event.Domain.Enums;
 
 namespace Event.Domain.Interfaces;
 
@@ -17,6 +18,8 @@ public interface IRepository<T> where T : class
 
     // Additional methods needed by Application layer
     void Update(T entity);
+    void Delete(T entity);
+    void SoftDelete(T entity);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync(
         int pageNumber,
@@ -97,17 +100,7 @@ public interface IVenueRepository : IRepository<Venue>
     Task<IEnumerable<Venue>> GetByIdsAsync(IEnumerable<Guid> venueIds, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Repository interface for Reservation aggregate
-/// </summary>
-public interface IReservationRepository : IRepository<Reservation>
-{
-    Task<IEnumerable<Reservation>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<Reservation>> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<Reservation>> GetExpiredReservationsAsync(DateTime cutoffTime, CancellationToken cancellationToken = default);
-    Task<Reservation?> GetActiveReservationAsync(Guid userId, Guid eventId, CancellationToken cancellationToken = default);
-    Task<bool> HasActiveReservationForSeatsAsync(List<Guid> seatIds, CancellationToken cancellationToken = default);
-}
+
 
 // IPricingRuleRepository interface is defined in IPricingRuleRepository.cs
 
@@ -118,7 +111,7 @@ public interface IEventSeriesRepository : IRepository<EventSeries>
 {
     Task<IEnumerable<EventSeries>> GetByPromoterId(Guid promoterId, CancellationToken cancellationToken = default);
     Task<EventSeries?> GetWithEventsAsync(Guid seriesId, CancellationToken cancellationToken = default);
-    Task<EventSeries?> GetBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default);
+        Task<EventSeries?> GetBySlugAsync(string slug, Guid organizationId, bool includeEvents, CancellationToken cancellationToken = default);
     Task<bool> IsSlugUniqueAsync(string slug, Guid organizationId, Guid? excludeSeriesId = null, CancellationToken cancellationToken = default);
 
     // Compatibility method for Application layer
@@ -132,10 +125,15 @@ public interface IUnitOfWork : IDisposable
 {
     IEventRepository Events { get; }
     IVenueRepository Venues { get; }
-    IReservationRepository Reservations { get; }
     IPricingRuleRepository PricingRules { get; }
     IEventSeriesRepository EventSeries { get; }
-    
+    IAllocationRepository Allocations { get; }
+
+    // Marketing Assets Repositories
+    IMarketingAssetRepository MarketingAssets { get; }
+    IAssetCategoryRepository AssetCategories { get; }
+    IMarketingCampaignRepository MarketingCampaigns { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task CommitTransactionAsync(CancellationToken cancellationToken = default);
@@ -182,4 +180,5 @@ public interface IInventorySnapshotService
     Task<string> GetInventoryETagAsync(Guid eventId, CancellationToken cancellationToken = default);
     Task InvalidateInventoryETagAsync(Guid eventId, CancellationToken cancellationToken = default);
     Task<Dictionary<Guid, int>> GetAvailabilitySnapshotAsync(Guid eventId, CancellationToken cancellationToken = default);
+    Task<InventorySnapshot?> GetInventorySnapshotAsync(Guid eventId, ConsistencyMode mode, CancellationToken cancellationToken = default);
 }

@@ -41,13 +41,8 @@ namespace Event.Infrastructure.Migrations
                 nullable: false,
                 defaultValue: "");
 
-            migrationBuilder.AddColumn<string>(
-                name: "CustomerEmail",
-                schema: "event",
-                table: "reservations",
-                type: "text",
-                nullable: false,
-                defaultValue: "");
+            // Note: CustomerEmail column add to reservations table removed
+            // because reservations table is dropped in RemoveReservationTables migration
 
             migrationBuilder.AddColumn<string>(
                 name: "CancellationReason",
@@ -471,10 +466,8 @@ namespace Event.Infrastructure.Migrations
                 schema: "event",
                 table: "ticket_types");
 
-            migrationBuilder.DropColumn(
-                name: "CustomerEmail",
-                schema: "event",
-                table: "reservations");
+            // Note: CustomerEmail column drop from reservations table removed
+            // because reservations table is dropped in RemoveReservationTables migration
 
             migrationBuilder.DropColumn(
                 name: "CancellationReason",

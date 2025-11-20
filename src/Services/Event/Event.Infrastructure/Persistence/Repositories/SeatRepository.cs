@@ -59,21 +59,8 @@ public class SeatRepository : BaseRepository<Seat>, ISeatRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Seat>> GetReservedSeatsAsync(Guid venueId, Guid? reservationId = null, CancellationToken cancellationToken = default)
-    {
-        var query = DbSet.Where(s => s.VenueId == venueId && s.Status == SeatStatus.Reserved);
-
-        if (reservationId.HasValue)
-        {
-            query = query.Where(s => s.CurrentReservationId == reservationId.Value);
-        }
-
-        return await query
-            .OrderBy(s => s.Position.Section)
-            .ThenBy(s => s.Position.Row)
-            .ThenBy(s => s.Position.Number)
-            .ToListAsync(cancellationToken);
-    }
+    // Note: Reservation-related queries moved to Ticket Service
+    // Event Service only manages seat map definitions and ticket type allocations
 
     public async Task<(IEnumerable<Seat> Seats, int TotalCount)> GetPagedByVenueAsync(
         Guid venueId,
@@ -154,14 +141,7 @@ public class SeatRepository : BaseRepository<Seat>, ISeatRepository
         return await query.AnyAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Seat>> GetExpiredReservationsAsync(DateTime cutoffTime, CancellationToken cancellationToken = default)
-    {
-        return await DbSet
-            .Where(s => s.Status == SeatStatus.Reserved && 
-                       s.ReservedUntil.HasValue && 
-                       s.ReservedUntil.Value <= cutoffTime)
-            .ToListAsync(cancellationToken);
-    }
+    // Note: Expired reservation queries moved to Ticket Service
 
     public async Task<int> CountByStatusAsync(Guid venueId, SeatStatus status, CancellationToken cancellationToken = default)
     {

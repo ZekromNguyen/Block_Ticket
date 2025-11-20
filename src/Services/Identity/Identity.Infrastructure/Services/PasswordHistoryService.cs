@@ -83,7 +83,7 @@ public class PasswordHistoryService : IPasswordHistoryService
 
         // Change password using the new method that doesn't store in history
         // (since we already stored it above)
-        user.ChangePasswordWithHistory(newPasswordHash, storeCurrentPasswordInHistory: false);
+        user.ChangePasswordWithHistory(newPasswordHash, _passwordConfig.PasswordHistoryCount);
 
         await _userRepository.UpdateAsync(user, cancellationToken);
 

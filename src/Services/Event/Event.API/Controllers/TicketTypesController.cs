@@ -1,4 +1,6 @@
 using Event.Application.Common.Models;
+using Event.Application.Features.TicketTypes.Commands.CreateTicketType;
+
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
@@ -36,34 +38,14 @@ public class TicketTypesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.Conflict)]
     public async Task<ActionResult<TicketTypeDto>> CreateTicketType(
         [FromRoute] Guid eventId,
-        [FromBody] CreateTicketTypeRequest request,
+        [FromBody] CreateTicketTypeCommandRequest request,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating ticket type: {TicketTypeName} for event {EventId}", 
+        _logger.LogInformation("Creating ticket type: {TicketTypeName} for event {EventId}",
             request.Name, eventId);
 
-        // TODO: Implement CreateTicketTypeCommand
-        // var command = CreateTicketTypeCommand.FromRequest(eventId, request);
-        // var result = await _mediator.Send(command, cancellationToken);
-
-        // Placeholder implementation
-        var result = new TicketTypeDto
-        {
-            Id = Guid.NewGuid(),
-            EventId = eventId,
-            Name = request.Name,
-            Code = request.Code,
-            Description = request.Description,
-            InventoryType = request.InventoryType,
-            BasePrice = request.BasePrice,
-            Capacity = new CapacityDto { Total = 100, Available = 100 },
-            MinPurchaseQuantity = request.MinPurchaseQuantity,
-            MaxPurchaseQuantity = request.MaxPurchaseQuantity,
-            MaxPerCustomer = request.MaxPerCustomer,
-            IsVisible = request.IsVisible,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        var command = CreateTicketTypeCommand.FromRequest(eventId, request);
+        var result = await _mediator.Send(command, cancellationToken);
 
         return CreatedAtAction(
             nameof(GetTicketType),
@@ -139,7 +121,7 @@ public class TicketTypesController : ControllerBase
         [FromHeader(Name = "If-Match")] int expectedVersion,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating ticket type {TicketTypeId} with expected version {ExpectedVersion}", 
+        _logger.LogInformation("Updating ticket type {TicketTypeId} with expected version {ExpectedVersion}",
             ticketTypeId, expectedVersion);
 
         // TODO: Implement UpdateTicketTypeCommand
@@ -216,7 +198,7 @@ public class TicketTypesController : ControllerBase
         [FromBody] UpdateTicketTypeCapacityRequest request,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating capacity for ticket type {TicketTypeId} to {NewCapacity}", 
+        _logger.LogInformation("Updating capacity for ticket type {TicketTypeId} to {NewCapacity}",
             ticketTypeId, request.NewCapacity);
 
         // TODO: Implement UpdateTicketTypeCapacityCommand

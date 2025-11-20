@@ -14,36 +14,21 @@ public enum EventStatus
     /// Event is under review for approval
     /// </summary>
     Review = 1,
-    
+
     /// <summary>
-    /// Event is published but tickets not yet on sale
+    /// Event is published and visible to the public
     /// </summary>
     Published = 2,
-    
-    /// <summary>
-    /// Tickets are currently on sale
-    /// </summary>
-    OnSale = 3,
-    
-    /// <summary>
-    /// All tickets have been sold
-    /// </summary>
-    SoldOut = 4,
-    
-    /// <summary>
-    /// Event has occurred and is completed
-    /// </summary>
-    Completed = 5,
-    
+
     /// <summary>
     /// Event has been cancelled
     /// </summary>
-    Cancelled = 6,
-    
+    Canceled = 3,
+
     /// <summary>
-    /// Event has been archived (soft deleted)
+    /// Event has been archived and is no longer visible
     /// </summary>
-    Archived = 7
+    Archived = 4
 }
 
 /// <summary>
@@ -63,44 +48,30 @@ public enum InventoryType
 }
 
 /// <summary>
-/// Represents the status of a seat
+/// Represents the status of a seat in Event Service (seat map definition only)
+/// Note: Reservation statuses (Held, Reserved, Confirmed) are managed by Ticket Service
 /// </summary>
 public enum SeatStatus
 {
     /// <summary>
-    /// Seat is available for purchase
+    /// Seat is available for allocation and purchase
     /// </summary>
     Available = 0,
-    
+
     /// <summary>
-    /// Seat is temporarily held during purchase process
+    /// Seat is blocked/unavailable (maintenance, damaged, etc.)
     /// </summary>
-    Held = 1,
-    
+    Blocked = 1,
+
     /// <summary>
-    /// Seat is reserved but not yet confirmed
+    /// Seat is temporarily held in a reservation cart.
     /// </summary>
-    Reserved = 2,
-    
+    Held = 2,
+
     /// <summary>
-    /// Seat purchase is confirmed
+    /// Seat has been sold and is unavailable.
     /// </summary>
-    Confirmed = 3,
-    
-    /// <summary>
-    /// Seat hold/reservation has been released
-    /// </summary>
-    Released = 4,
-    
-    /// <summary>
-    /// Seat hold/reservation has expired
-    /// </summary>
-    Expired = 5,
-    
-    /// <summary>
-    /// Seat is blocked/unavailable
-    /// </summary>
-    Blocked = 6
+    Sold = 3
 }
 
 /// <summary>

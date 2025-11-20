@@ -152,15 +152,14 @@ public record SeatReservationResult
 }
 
 /// <summary>
-/// Seat statistics DTO
+/// Seat statistics DTO (Event Service - seat map definitions only)
+/// Note: Reservation statistics are provided by Ticket Service
 /// </summary>
 public record SeatStatisticsDto
 {
     public Guid VenueId { get; init; }
     public int TotalSeats { get; init; }
     public int AvailableSeats { get; init; }
-    public int ReservedSeats { get; init; }
-    public int ConfirmedSeats { get; init; }
     public int BlockedSeats { get; init; }
     public Dictionary<string, int> SeatsBySection { get; init; } = new();
     public Dictionary<string, int> SeatsByStatus { get; init; } = new();

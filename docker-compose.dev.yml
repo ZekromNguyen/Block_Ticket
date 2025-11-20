@@ -1,0 +1,82 @@
+version: '3.8'
+
+# Infrastructure services for local development
+# Run: docker-compose up -d
+# Stop: docker-compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: blockticket-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blockticket-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: blockticket-redis
+    command: redis-server --requirepass redis_password --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blockticket-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: blockticket-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI (http://localhost:15672)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - blockticket-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: blockticket-mailhog
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI (http://localhost:8025)
+    networks:
+      - blockticket-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  blockticket-network:
+    driver: bridge

@@ -140,56 +140,9 @@ public class IntegrationEventPublisher : IIntegrationEventPublisher
         }
     }
 
-    public async Task PublishReservationCreatedAsync(Guid reservationId, Guid eventId, Guid userId, List<Guid> seatIds, DateTime expiresAt, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Publishing ReservationCreated integration event for Reservation {ReservationId}", reservationId);
+    // Note: Reservation integration events moved to Ticketing Service
 
-        try
-        {
-            var integrationEvent = new ReservationCreatedIntegrationEvent
-            {
-                ReservationId = reservationId,
-                EventId = eventId,
-                UserId = userId,
-                ExpiresAt = expiresAt,
-                SeatIds = seatIds
-            };
 
-            await _publishEndpoint.Publish(integrationEvent, cancellationToken);
-            _logger.LogInformation("Successfully published ReservationCreated integration event for Reservation {ReservationId}", reservationId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish ReservationCreated integration event for Reservation {ReservationId}", reservationId);
-            throw;
-        }
-    }
-
-    public async Task PublishReservationConfirmedAsync(Guid reservationId, Guid eventId, Guid userId, List<Guid> seatIds, decimal totalAmount, CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Publishing ReservationConfirmed integration event for Reservation {ReservationId}", reservationId);
-
-        try
-        {
-            var integrationEvent = new ReservationConfirmedIntegrationEvent
-            {
-                ReservationId = reservationId,
-                EventId = eventId,
-                UserId = userId,
-                SeatIds = seatIds,
-                TotalAmount = new MoneyDto { Amount = totalAmount, Currency = "USD" },
-                ConfirmedAt = DateTime.UtcNow
-            };
-
-            await _publishEndpoint.Publish(integrationEvent, cancellationToken);
-            _logger.LogInformation("Successfully published ReservationConfirmed integration event for Reservation {ReservationId}", reservationId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish ReservationConfirmed integration event for Reservation {ReservationId}", reservationId);
-            throw;
-        }
-    }
 
     private static string DetermineChangeType(int previousQuantity, int newQuantity, string reason)
     {

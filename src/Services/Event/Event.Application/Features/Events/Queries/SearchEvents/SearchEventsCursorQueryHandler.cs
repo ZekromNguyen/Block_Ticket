@@ -146,7 +146,7 @@ public class SearchEventsCursorQueryHandler : IRequestHandler<SearchEventsCursor
         Expression<Func<EventAggregate, bool>> predicate = e => true;
 
         // Always filter to published events for public search
-        predicate = predicate.And(e => e.Status == EventStatus.Published || e.Status == EventStatus.OnSale);
+        predicate = predicate.And(e => e.Status == EventStatus.Published);
 
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
@@ -336,7 +336,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         var result = await GetCursorPagedEvents(request, predicate, cancellationToken);
 
         // Convert to DTOs
-        var eventDtos = result.Items.Select(MapToEventDto).ToList();
+        var eventDtos = result.Items.Select(EventDto.FromEntity).ToList();
 
         var finalResult = new DomainModels.CursorPagedResult<EventDto>
         {
@@ -451,38 +451,7 @@ public class GetEventsCursorQueryHandler : IRequestHandler<GetEventsCursorQuery,
         return predicate;
     }
 
-    private EventDto MapToEventDto(EventAggregate eventEntity)
-    {
-        return new EventDto
-        {
-            Id = eventEntity.Id,
-            Title = eventEntity.Title,
-            Description = eventEntity.Description,
-            Slug = eventEntity.Slug?.Value ?? string.Empty,
-            OrganizationId = eventEntity.OrganizationId,
-            PromoterId = eventEntity.PromoterId,
-            VenueId = eventEntity.VenueId,
-            Status = eventEntity.Status.ToString(),
-            EventDate = eventEntity.EventDate,
-            TimeZone = eventEntity.TimeZone?.Value ?? string.Empty,
-            ImageUrl = eventEntity.ImageUrl,
-            BannerUrl = eventEntity.BannerUrl,
-            SeoTitle = eventEntity.SeoTitle,
-            SeoDescription = eventEntity.SeoDescription,
-            Categories = eventEntity.Categories.ToList(),
-            Tags = eventEntity.Tags.ToList(),
-            Version = eventEntity.Version,
-            TotalCapacity = eventEntity.TotalCapacity,
-            AvailableCapacity = eventEntity.GetTotalAvailableCapacity(),
-            PublishWindow = eventEntity.PublishWindow != null ? new DateTimeRangeDto
-            {
-                Start = eventEntity.PublishWindow.StartDate,
-                End = eventEntity.PublishWindow.EndDate
-            } : null,
-            CreatedAt = eventEntity.CreatedAt,
-            UpdatedAt = eventEntity.UpdatedAt ?? DateTime.UtcNow
-        };
-    }
+
 
     private string GenerateGetEventsCacheKey(GetEventsCursorQuery request)
     {

@@ -21,9 +21,7 @@ public class Seat : BaseEntity
     public string? PriceCategory { get; private set; }
     public string? Notes { get; private set; }
     
-    // Current Allocation
-    public Guid? CurrentReservationId { get; private set; }
-    public DateTime? ReservedUntil { get; private set; }
+    // Current Allocation (Event Service only manages ticket type allocations)
     public Guid? AllocatedToTicketTypeId { get; private set; }
     
     // Navigation Properties
@@ -55,64 +53,31 @@ public class Seat : BaseEntity
         Notes = notes?.Trim();
     }
 
-    public void Hold(Guid reservationId, DateTime holdUntil)
+    public void Hold()
     {
         if (Status != SeatStatus.Available)
             throw new SeatNotAvailableException(Id, Position.GetDisplayName());
-        
-        if (holdUntil <= DateTime.UtcNow)
-            throw new ReservationDomainException("Hold expiration must be in the future");
-
         Status = SeatStatus.Held;
-        CurrentReservationId = reservationId;
-        ReservedUntil = holdUntil;
     }
 
-    public void Reserve(Guid reservationId, DateTime reserveUntil)
+    public void Sell()
     {
-        if (Status != SeatStatus.Available && Status != SeatStatus.Held)
-            throw new SeatNotAvailableException(Id, Position.GetDisplayName());
-        
-        // If currently held, verify it's the same reservation
-        if (Status == SeatStatus.Held && CurrentReservationId != reservationId)
-            throw new ReservationDomainException("Seat is held by a different reservation");
-
-        Status = SeatStatus.Reserved;
-        CurrentReservationId = reservationId;
-        ReservedUntil = reserveUntil;
-    }
-
-    public void Confirm(Guid reservationId)
-    {
-        if (Status != SeatStatus.Reserved)
-            throw new ReservationDomainException("Can only confirm reserved seats");
-        
-        if (CurrentReservationId != reservationId)
-            throw new ReservationDomainException("Seat is reserved by a different reservation");
-
-        Status = SeatStatus.Confirmed;
-        ReservedUntil = null; // No longer has expiration
+        if (Status != SeatStatus.Held)
+            throw new EventDomainException($"Cannot sell a seat that is not held. Current status: {Status}");
+        Status = SeatStatus.Sold;
     }
 
     public void Release()
     {
-        if (Status == SeatStatus.Available || Status == SeatStatus.Blocked)
-            return; // Already in desired state
+        if (Status != SeatStatus.Held)
+            return; // Can only release a held seat
 
         Status = SeatStatus.Available;
-        CurrentReservationId = null;
-        ReservedUntil = null;
-        AllocatedToTicketTypeId = null;
     }
 
     public void Block()
     {
-        if (Status == SeatStatus.Confirmed)
-            throw new ReservationDomainException("Cannot block confirmed seats");
-
         Status = SeatStatus.Blocked;
-        CurrentReservationId = null;
-        ReservedUntil = null;
         AllocatedToTicketTypeId = null;
     }
 
@@ -140,68 +105,24 @@ public class Seat : BaseEntity
         }
     }
 
-    public bool IsExpired()
-    {
-        return ReservedUntil.HasValue && ReservedUntil.Value <= DateTime.UtcNow;
-    }
-
-    public void CheckAndHandleExpiration()
-    {
-        if (IsExpired())
-        {
-            var previousStatus = Status;
-            Release();
-            
-            // Could add domain event here for expired reservation
-            if (previousStatus == SeatStatus.Held)
-            {
-                Status = SeatStatus.Expired;
-            }
-        }
-    }
-
-    public bool IsAvailableForReservation(Guid? ticketTypeId = null)
+    public bool IsAvailableForAllocation(Guid? ticketTypeId = null)
     {
         if (Status != SeatStatus.Available)
             return false;
-        
+
         // If seat is allocated to a specific ticket type, check if it matches
         if (AllocatedToTicketTypeId.HasValue && ticketTypeId.HasValue)
         {
             return AllocatedToTicketTypeId.Value == ticketTypeId.Value;
         }
-        
+
         // If no allocation or no ticket type specified, it's available
         return true;
     }
 
-    public bool CanBeHeld()
+    public bool CanBeAllocated()
     {
         return Status == SeatStatus.Available;
-    }
-
-    public bool CanBeReserved()
-    {
-        return Status == SeatStatus.Available || Status == SeatStatus.Held;
-    }
-
-    public bool CanBeConfirmed()
-    {
-        return Status == SeatStatus.Reserved && !IsExpired();
-    }
-
-    public bool CanBeReleased()
-    {
-        return Status != SeatStatus.Available && Status != SeatStatus.Blocked;
-    }
-
-    public TimeSpan? GetRemainingHoldTime()
-    {
-        if (!ReservedUntil.HasValue || Status == SeatStatus.Confirmed)
-            return null;
-        
-        var remaining = ReservedUntil.Value - DateTime.UtcNow;
-        return remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero;
     }
 
     public string GetStatusDescription()
@@ -209,12 +130,9 @@ public class Seat : BaseEntity
         return Status switch
         {
             SeatStatus.Available => "Available",
-            SeatStatus.Held => $"Held until {ReservedUntil:HH:mm}",
-            SeatStatus.Reserved => $"Reserved until {ReservedUntil:HH:mm}",
-            SeatStatus.Confirmed => "Sold",
-            SeatStatus.Released => "Available",
-            SeatStatus.Expired => "Available",
             SeatStatus.Blocked => "Unavailable",
+            SeatStatus.Held => "Held",
+            SeatStatus.Sold => "Sold",
             _ => "Unknown"
         };
     }

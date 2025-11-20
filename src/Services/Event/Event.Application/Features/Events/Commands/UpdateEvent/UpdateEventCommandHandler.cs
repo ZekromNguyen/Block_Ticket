@@ -69,7 +69,7 @@ public class UpdateEventCommandHandler : IRequestHandler<UpdateEventCommand, Eve
             eventAggregate.Id, eventAggregate.Version);
 
         // Convert to DTO
-        return MapToDto(eventAggregate);
+        return EventDto.FromEntity(eventAggregate);
     }
 
     private async Task<EventAggregate> GetEventAggregate(Guid eventId, CancellationToken cancellationToken)
@@ -93,25 +93,9 @@ public class UpdateEventCommandHandler : IRequestHandler<UpdateEventCommand, Eve
 
     private async Task ValidateBusinessRules(EventAggregate eventAggregate, UpdateEventCommand request, CancellationToken cancellationToken)
     {
-        // Cannot update published events in certain ways
-        if (eventAggregate.Status == EventStatus.Published || eventAggregate.Status == EventStatus.OnSale)
+        if (!eventAggregate.CanBeModified())
         {
-            if (request.EventDate.HasValue && request.EventDate.Value != eventAggregate.EventDate)
-            {
-                throw new InvalidOperationException("Cannot change event date for published events");
-            }
-        }
-
-        // Cannot update sold out events
-        if (eventAggregate.Status == EventStatus.SoldOut)
-        {
-            throw new InvalidOperationException("Cannot update sold out events");
-        }
-
-        // Cannot update cancelled events
-        if (eventAggregate.Status == EventStatus.Cancelled)
-        {
-            throw new InvalidOperationException("Cannot update cancelled events");
+            throw new InvalidOperationException($"Cannot update event in {eventAggregate.Status} status");
         }
 
         // Validate event date is still in the future if being changed
@@ -225,34 +209,5 @@ public class UpdateEventCommandHandler : IRequestHandler<UpdateEventCommand, Eve
         }
     }
 
-    private static EventDto MapToDto(EventAggregate eventAggregate)
-    {
-        return new EventDto
-        {
-            Id = eventAggregate.Id,
-            Title = eventAggregate.Title,
-            Description = eventAggregate.Description,
-            Slug = eventAggregate.Slug.Value,
-            OrganizationId = eventAggregate.OrganizationId,
-            PromoterId = eventAggregate.PromoterId,
-            VenueId = eventAggregate.VenueId,
-            Status = eventAggregate.Status.ToString(),
-            EventDate = eventAggregate.EventDate,
-            TimeZone = eventAggregate.TimeZone.Value,
-            PublishStartDate = eventAggregate.PublishWindow?.StartDate,
-            PublishEndDate = eventAggregate.PublishWindow?.EndDate,
-            ImageUrl = eventAggregate.ImageUrl,
-            BannerUrl = eventAggregate.BannerUrl,
-            SeoTitle = eventAggregate.SeoTitle,
-            SeoDescription = eventAggregate.SeoDescription,
-            Categories = eventAggregate.Categories.ToList(),
-            Tags = eventAggregate.Tags.ToList(),
-            Version = eventAggregate.Version,
-            CreatedAt = eventAggregate.CreatedAt,
-            UpdatedAt = eventAggregate.UpdatedAt,
-            TicketTypes = new List<TicketTypeDto>(),
-            PricingRules = new List<PricingRuleDto>(),
-            Allocations = new List<AllocationDto>()
-        };
-    }
+
 }

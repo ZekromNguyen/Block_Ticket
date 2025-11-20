@@ -37,13 +37,13 @@ public class SecurityEventNotificationHandler :
         {
             // Get the security event for this login to send notification
             var securityEvents = await _securityService.GetSecurityEventsAsync(
-                notification.UserId, 
-                notification.LoginAt.AddMinutes(-1), 
-                notification.LoginAt.AddMinutes(1), 
+                notification.UserId,
+                notification.LoginAt.AddMinutes(-1),
+                notification.LoginAt.AddMinutes(1),
                 cancellationToken);
 
-            var loginEvent = securityEvents.FirstOrDefault(e => 
-                e.EventType == "LOGIN_SUCCESS" && 
+            var loginEvent = securityEvents.FirstOrDefault(e =>
+                e.EventType == "LOGIN_SUCCESS" &&
                 e.UserId == notification.UserId);
 
             if (loginEvent != null)
@@ -57,20 +57,20 @@ public class SecurityEventNotificationHandler :
         }
     }
 
-    public async Task Handle(UserLoginFailedDomainEvent notification, CancellationToken cancellationToken)
+        public async Task Handle(UserLoginFailedDomainEvent notification, CancellationToken cancellationToken)
     {
         try
         {
             // Login failures are more critical, so we always want to track these
             var now = DateTime.UtcNow;
             var securityEvents = await _securityService.GetSecurityEventsAsync(
-                notification.UserId, 
-                now.AddMinutes(-1), 
-                now.AddMinutes(1), 
+                notification.UserId,
+                now.AddMinutes(-1),
+                now.AddMinutes(1),
                 cancellationToken);
 
-            var failedLoginEvent = securityEvents.FirstOrDefault(e => 
-                e.EventType == "LOGIN_FAILURE" && 
+            var failedLoginEvent = securityEvents.FirstOrDefault(e =>
+                e.EventType == "LOGIN_FAILURE" &&
                 e.UserId == notification.UserId);
 
             if (failedLoginEvent != null)
@@ -93,7 +93,7 @@ public class SecurityEventNotificationHandler :
         }
     }
 
-    public async Task Handle(UserAccountLockedDomainEvent notification, CancellationToken cancellationToken)
+        public async Task Handle(UserAccountLockedDomainEvent notification, CancellationToken cancellationToken)
     {
         try
         {
@@ -116,7 +116,7 @@ public class SecurityEventNotificationHandler :
         }
     }
 
-    public async Task Handle(UserAccountUnlockedDomainEvent notification, CancellationToken cancellationToken)
+        public async Task Handle(UserAccountUnlockedDomainEvent notification, CancellationToken cancellationToken)
     {
         try
         {
@@ -131,20 +131,20 @@ public class SecurityEventNotificationHandler :
         }
     }
 
-    public async Task Handle(UserPasswordChangedDomainEvent notification, CancellationToken cancellationToken)
+        public async Task Handle(UserPasswordChangedDomainEvent notification, CancellationToken cancellationToken)
     {
         try
         {
             // Password changes should be notified as they're security-sensitive
             var now = DateTime.UtcNow;
             var securityEvents = await _securityService.GetSecurityEventsAsync(
-                notification.UserId, 
-                now.AddMinutes(-5), 
-                now.AddMinutes(1), 
+                notification.UserId,
+                now.AddMinutes(-5),
+                now.AddMinutes(1),
                 cancellationToken);
 
-            var passwordChangeEvent = securityEvents.FirstOrDefault(e => 
-                e.EventType == "PASSWORD_CHANGED" && 
+            var passwordChangeEvent = securityEvents.FirstOrDefault(e =>
+                e.EventType == "PASSWORD_CHANGED" &&
                 e.UserId == notification.UserId);
 
             if (passwordChangeEvent != null)
@@ -158,33 +158,15 @@ public class SecurityEventNotificationHandler :
         }
     }
 
-    public async Task Handle(UserMfaEnabledDomainEvent notification, CancellationToken cancellationToken)
+        public Task Handle(UserMfaEnabledDomainEvent notification, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _notificationService.SendCriticalSecurityAlertAsync(
-                $"MFA enabled for user {notification.Email}",
-                "Multi-factor authentication has been enabled, improving account security.",
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending notification for MFA enabled event {UserId}", notification.UserId);
-        }
+        _logger.LogInformation("MFA enabled for user: {Email}", notification.Email);
+        return Task.CompletedTask;
     }
 
-    public async Task Handle(UserMfaDisabledDomainEvent notification, CancellationToken cancellationToken)
+        public Task Handle(UserMfaDisabledDomainEvent notification, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _notificationService.SendCriticalSecurityAlertAsync(
-                $"MFA disabled for user {notification.Email}",
-                "Multi-factor authentication has been disabled. Account security may be reduced.",
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error sending notification for MFA disabled event {UserId}", notification.UserId);
-        }
+        _logger.LogInformation("MFA disabled for user: {Email}", notification.Email);
+        return Task.CompletedTask;
     }
 }

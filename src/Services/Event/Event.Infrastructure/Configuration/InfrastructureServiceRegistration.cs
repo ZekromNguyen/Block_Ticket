@@ -1,5 +1,6 @@
 using Event.Application.Common.Interfaces;
 using Event.Domain.Interfaces;
+using Event.Infrastructure.Consumers;
 using Event.Infrastructure.Persistence;
 using Event.Infrastructure.Persistence.Interceptors;
 using Event.Infrastructure.Persistence.Repositories;
@@ -20,12 +21,12 @@ namespace Event.Infrastructure.Configuration;
 public static class InfrastructureServiceRegistration
 {
     public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services, 
-        IConfiguration configuration, 
+        this IServiceCollection services,
+        IConfiguration configuration,
         IHostEnvironment environment)
     {
         // Add Entity Framework
-        AddEntityFramework(services, configuration);
+        AddEntityFramework(services, configuration, environment);
 
         // Add Redis
         AddRedis(services, configuration);
@@ -48,46 +49,49 @@ public static class InfrastructureServiceRegistration
         return services;
     }
 
-    private static void AddEntityFramework(IServiceCollection services, IConfiguration configuration)
+    private static void AddEntityFramework(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         // Add audit interceptor
         services.AddScoped<AuditInterceptor>();
 
-        // Add DbContext
-        services.AddDbContext<EventDbContext>((serviceProvider, options) =>
+        if (!environment.IsEnvironment("Testing"))
         {
-            var connectionString = configuration.GetConnectionString("DefaultConnection");
-            
-            options.UseNpgsql(connectionString, npgsqlOptions =>
+            // Add DbContext
+            services.AddDbContext<EventDbContext>((serviceProvider, options) =>
             {
-                npgsqlOptions.MigrationsAssembly(typeof(EventDbContext).Assembly.FullName);
-                npgsqlOptions.EnableRetryOnFailure(
-                    maxRetryCount: 3,
-                    maxRetryDelay: TimeSpan.FromSeconds(30),
-                    errorCodesToAdd: null);
-                npgsqlOptions.CommandTimeout(30);
+                var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly(typeof(EventDbContext).Assembly.FullName);
+                    npgsqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 3,
+                        maxRetryDelay: TimeSpan.FromSeconds(30),
+                        errorCodesToAdd: null);
+                    npgsqlOptions.CommandTimeout(30);
+                });
+
+                // Enable sensitive data logging in development
+                if (environment.IsDevelopment())
+                {
+                    options.EnableSensitiveDataLogging();
+                    options.EnableDetailedErrors();
+                }
+
+                // Add logging
+                options.UseLoggerFactory(serviceProvider.GetRequiredService<ILoggerFactory>());
             });
 
-            // Enable sensitive data logging in development
-            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
-            {
-                options.EnableSensitiveDataLogging();
-                options.EnableDetailedErrors();
-            }
-
-            // Add logging
-            options.UseLoggerFactory(serviceProvider.GetRequiredService<ILoggerFactory>());
-        });
-
-        // Add health checks for database
-        services.AddHealthChecks()
-            .AddNpgSql(configuration.GetConnectionString("DefaultConnection")!, "database");
+            // Add health checks for database
+            services.AddHealthChecks()
+                .AddNpgSql(configuration.GetConnectionString("DefaultConnection")!, "database");
+        }
     }
 
     private static void AddRedis(IServiceCollection services, IConfiguration configuration)
     {
         var redisConnectionString = configuration.GetConnectionString("Redis");
-        
+
         if (!string.IsNullOrEmpty(redisConnectionString))
         {
             services.AddSingleton<IConnectionMultiplexer>(provider =>
@@ -97,7 +101,7 @@ public static class InfrastructureServiceRegistration
                 configurationOptions.ConnectRetry = 3;
                 configurationOptions.ConnectTimeout = 5000;
                 configurationOptions.SyncTimeout = 5000;
-                
+
                 return ConnectionMultiplexer.Connect(configurationOptions);
             });
 
@@ -119,9 +123,14 @@ public static class InfrastructureServiceRegistration
     {
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<IVenueRepository, VenueRepository>();
-        services.AddScoped<IReservationRepository, ReservationRepository>();
         services.AddScoped<IPricingRuleRepository, Persistence.Repositories.PricingRuleRepository>();
         services.AddScoped<IEventSeriesRepository, EventSeriesRepository>();
+        services.AddScoped<IAllocationRepository, AllocationRepository>();
+
+        // Marketing Assets Repositories
+        services.AddScoped<IMarketingAssetRepository, MarketingAssetRepository>();
+        services.AddScoped<IAssetCategoryRepository, AssetCategoryRepository>();
+        services.AddScoped<IMarketingCampaignRepository, MarketingCampaignRepository>();
 
         // Add Unit of Work
         services.AddScoped<IUnitOfWork, Persistence.UnitOfWork>();
@@ -150,6 +159,7 @@ public static class InfrastructureServiceRegistration
         // Add other infrastructure services as needed
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IFileStorageService, FileStorageService>();
+        services.AddScoped<Event.Application.Interfaces.Infrastructure.IAdvancedCacheService, AdvancedRedisCacheService>();
     }
 
     private static void AddMassTransit(IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
@@ -157,13 +167,12 @@ public static class InfrastructureServiceRegistration
         services.AddMassTransit(x =>
         {
             // Add consumers
-            x.AddConsumersFromNamespaceContaining<EventCreatedConsumer>();
+            x.AddConsumersFromNamespaceContaining<UserCreatedIntegrationEventConsumer>();
+            x.AddConsumer<UserCreatedIntegrationEventConsumer>();
+            x.AddConsumer<UserUpdatedIntegrationEventConsumer>();
 
             // Add integration event consumers
-            x.AddConsumer<Messaging.Consumers.OrderPaymentAuthorizedConsumer>();
-            x.AddConsumer<Messaging.Consumers.OrderPaymentCompletedConsumer>();
-            x.AddConsumer<Messaging.Consumers.OrderPaymentFailedConsumer>();
-            x.AddConsumer<Messaging.Consumers.OrderCancelledConsumer>();
+            // Note: Order payment consumers moved to Ticketing Service
             x.AddConsumer<Messaging.Consumers.RefundRequestedConsumer>();
             x.AddConsumer<Messaging.Consumers.RefundProcessedConsumer>();
             x.AddConsumer<Messaging.Consumers.TicketResaleListedConsumer>();
@@ -210,44 +219,12 @@ public static class InfrastructureServiceRegistration
 
     private static void AddBackgroundServices(IServiceCollection services)
     {
-        services.AddHostedService<ReservationCleanupService>();
         services.AddHostedService<EventStatusUpdateService>();
         services.AddHostedService<CacheWarmupService>();
     }
 }
 
-// Placeholder services that would need to be implemented
-public class ReservationRepository : BaseRepository<Domain.Entities.Reservation>, IReservationRepository
-{
-    public ReservationRepository(EventDbContext context) : base(context) { }
 
-    public Task<IEnumerable<Domain.Entities.Reservation>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public Task<IEnumerable<Domain.Entities.Reservation>> GetByEventIdAsync(Guid eventId, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public Task<IEnumerable<Domain.Entities.Reservation>> GetExpiredReservationsAsync(DateTime cutoffTime, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public Task<Domain.Entities.Reservation?> GetActiveReservationAsync(Guid userId, Guid eventId, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    public Task<bool> HasActiveReservationForSeatsAsync(List<Guid> seatIds, CancellationToken cancellationToken = default)
-    {
-        throw new NotImplementedException();
-    }
-
-    // UpdateAsync, DeleteAsync, ExistsAsync inherited from BaseRepository
-}
 
 // PricingRuleRepository is now implemented in Repositories/PricingRuleRepository.cs
 
@@ -271,12 +248,7 @@ public class SeatLockService : ISeatLockService
     public Task<bool> AreSeatsLockedAsync(List<Guid> seatIds, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 }
 
-public class InventorySnapshotService : IInventorySnapshotService
-{
-    public Task<string> GetInventoryETagAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task InvalidateInventoryETagAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-    public Task<Dictionary<Guid, int>> GetAvailabilitySnapshotAsync(Guid eventId, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-}
+
 
 // PricingEngineService is now implemented in Services/PricingEngineService.cs
 
@@ -307,50 +279,7 @@ public class EventCreatedConsumer : IConsumer<object>
     }
 }
 
-public class ReservationCleanupService : BackgroundService
-{
-    private readonly ILogger<ReservationCleanupService> _logger;
-    private readonly IServiceProvider _serviceProvider;
 
-    public ReservationCleanupService(ILogger<ReservationCleanupService> logger, IServiceProvider serviceProvider)
-    {
-        _logger = logger;
-        _serviceProvider = serviceProvider;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Reservation cleanup service started");
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                _logger.LogDebug("Running reservation cleanup task");
-
-                // TODO: Implement actual cleanup logic
-                // This would typically:
-                // 1. Find expired reservations
-                // 2. Release reserved seats
-                // 3. Update reservation status
-
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when cancellation is requested
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during reservation cleanup");
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
-            }
-        }
-
-        _logger.LogInformation("Reservation cleanup service stopped");
-    }
-}
 
 public class EventStatusUpdateService : BackgroundService
 {

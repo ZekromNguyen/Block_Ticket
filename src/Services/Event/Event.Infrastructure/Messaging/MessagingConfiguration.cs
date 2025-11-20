@@ -27,13 +27,6 @@ public static class MessagingConfiguration
         cfg.Message<InventoryChangedIntegrationEvent>(e => e.SetEntityName("inventory.changed"));
         cfg.Message<TicketsRestockedIntegrationEvent>(e => e.SetEntityName("tickets.restocked"));
 
-        // Reservation Events
-        cfg.Message<ReservationCreatedIntegrationEvent>(e => e.SetEntityName("reservation.created"));
-        cfg.Message<ReservationConfirmedIntegrationEvent>(e => e.SetEntityName("reservation.confirmed"));
-        cfg.Message<ReservationCancelledIntegrationEvent>(e => e.SetEntityName("reservation.cancelled"));
-        cfg.Message<ReservationExpiredIntegrationEvent>(e => e.SetEntityName("reservation.expired"));
-        cfg.Message<ReservationExtendedIntegrationEvent>(e => e.SetEntityName("reservation.extended"));
-
         // Pricing Events
         cfg.Message<PricingRuleCreatedIntegrationEvent>(e => e.SetEntityName("pricing.rule.created"));
         cfg.Message<PricingRuleUpdatedIntegrationEvent>(e => e.SetEntityName("pricing.rule.updated"));
@@ -65,9 +58,7 @@ public static class MessagingConfiguration
             e.PrefetchCount = 10;
             e.UseMessageRetry(r => r.Exponential(5, TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(2)));
             
-            e.ConfigureConsumer<Consumers.OrderPaymentAuthorizedConsumer>(context);
-            e.ConfigureConsumer<Consumers.OrderPaymentCompletedConsumer>(context);
-            e.ConfigureConsumer<Consumers.OrderPaymentFailedConsumer>(context);
+            // Note: Order payment consumers moved to Ticketing Service
         });
 
         // Configure refund consumers
@@ -96,7 +87,7 @@ public static class MessagingConfiguration
             e.PrefetchCount = 10;
             e.UseMessageRetry(r => r.Exponential(3, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(1)));
             
-            e.ConfigureConsumer<Consumers.OrderCancelledConsumer>(context);
+            // Note: Order cancelled consumer moved to Ticketing Service
         });
 
         // Configure user preference consumers (lower priority)
@@ -123,10 +114,7 @@ public static class MessagingConfiguration
             { nameof(EventUpdatedIntegrationEvent), "event.updated" },
             { nameof(InventoryChangedIntegrationEvent), "inventory.changed" },
             { nameof(TicketsRestockedIntegrationEvent), "tickets.restocked" },
-            { nameof(ReservationCreatedIntegrationEvent), "reservation.created" },
-            { nameof(ReservationConfirmedIntegrationEvent), "reservation.confirmed" },
-            { nameof(ReservationCancelledIntegrationEvent), "reservation.cancelled" },
-            { nameof(ReservationExpiredIntegrationEvent), "reservation.expired" },
+            // Note: Reservation events moved to Ticketing Service
             { nameof(PricingRuleCreatedIntegrationEvent), "pricing.rule.created" },
             { nameof(DiscountCodeUsedIntegrationEvent), "discount.code.used" },
 

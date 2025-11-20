@@ -10,33 +10,15 @@ namespace Event.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<string>(
-                name: "Status",
-                schema: "event",
-                table: "reservations",
-                type: "character varying(20)",
-                maxLength: 20,
-                nullable: false,
-                defaultValue: "Active",
-                oldClrType: typeof(string),
-                oldType: "character varying(20)",
-                oldMaxLength: 20);
+            // Note: Reservation status default value fix removed
+            // because reservations table is dropped in RemoveReservationTables migration
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<string>(
-                name: "Status",
-                schema: "event",
-                table: "reservations",
-                type: "character varying(20)",
-                maxLength: 20,
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "character varying(20)",
-                oldMaxLength: 20,
-                oldDefaultValue: "Active");
+            // Note: Reservation status default value rollback removed
+            // because reservations table is dropped in RemoveReservationTables migration
         }
     }
 }

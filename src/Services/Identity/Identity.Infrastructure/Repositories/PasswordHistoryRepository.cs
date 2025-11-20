@@ -19,7 +19,7 @@ public class PasswordHistoryRepository : IPasswordHistoryRepository
         int? count = null, 
         CancellationToken cancellationToken = default)
     {
-        var query = _context.PasswordHistory
+        var query = _context.PasswordHistories
             .Where(ph => ph.UserId == userId)
             .OrderByDescending(ph => ph.CreatedAt);
 
@@ -37,7 +37,7 @@ public class PasswordHistoryRepository : IPasswordHistoryRepository
         int historyCount, 
         CancellationToken cancellationToken = default)
     {
-        var query = _context.PasswordHistory
+        var query = _context.PasswordHistories
             .Where(ph => ph.UserId == userId && ph.PasswordHash == passwordHash)
             .OrderByDescending(ph => ph.CreatedAt);
 
@@ -51,7 +51,7 @@ public class PasswordHistoryRepository : IPasswordHistoryRepository
 
     public async Task AddAsync(PasswordHistory passwordHistory, CancellationToken cancellationToken = default)
     {
-        await _context.PasswordHistory.AddAsync(passwordHistory, cancellationToken);
+        await _context.PasswordHistories.AddAsync(passwordHistory, cancellationToken);
     }
 
     public async Task RemoveOldEntriesAsync(
@@ -63,7 +63,7 @@ public class PasswordHistoryRepository : IPasswordHistoryRepository
         var cutoffDate = DateTime.UtcNow.AddDays(-retentionDays);
         
         // Get all password history for user ordered by creation date (newest first)
-        var allHistory = await _context.PasswordHistory
+        var allHistory = await _context.PasswordHistories
             .Where(ph => ph.UserId == userId)
             .OrderByDescending(ph => ph.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -84,13 +84,13 @@ public class PasswordHistoryRepository : IPasswordHistoryRepository
 
         if (entriesToRemove.Any())
         {
-            _context.PasswordHistory.RemoveRange(entriesToRemove);
+            _context.PasswordHistories.RemoveRange(entriesToRemove);
         }
     }
 
     public async Task<int> GetPasswordHistoryCountAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        return await _context.PasswordHistory
+        return await _context.PasswordHistories
             .Where(ph => ph.UserId == userId)
             .CountAsync(cancellationToken);
     }

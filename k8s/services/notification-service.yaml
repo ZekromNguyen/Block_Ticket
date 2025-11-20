@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-config
+  namespace: blockticket
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:80"
+  Logging__LogLevel__Default: "Information"
+  Logging__LogLevel__Microsoft.AspNetCore: "Warning"
+  Logging__LogLevel__Microsoft.EntityFrameworkCore: "Warning"
+  RabbitMQ__Host: "rabbitmq-service"
+  RabbitMQ__Username: "guest"
+  RabbitMQ__VirtualHost: "/"
+  RabbitMQ__Port: "5672"
+  Email__SmtpHost: "mailhog-service"
+  Email__SmtpPort: "1025"
+  Email__FromEmail: "noreply@blockticket.com"
+  Email__FromName: "BlockTicket"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: notification-secret
+  namespace: blockticket
+type: Opaque
+data:
+  ConnectionStrings__DefaultConnection: SG9zdD1wb3N0Z3Jlcy1zZXJ2aWNlO1BvcnQ9NTQzMjtEYXRhYmFzZT1CbG9ja1RpY2tldF9Ob3RpZmljYXRpb247VXNlcm5hbWU9cG9zdGdyZXM7UGFzc3dvcmQ9cG9zdGdyZXM7SW5jbHVkZSBFcnJvciBEZXRhaWw9dHJ1ZQ== # base64 encoded connection string
+  RabbitMQ__Password: Z3Vlc3Q= # base64 encoded password
+  Email__SmtpPassword: "" # base64 encoded SMTP password (empty for development)
+  Sms__TwilioAccountSid: eW91ci10d2lsaW8tYWNjb3VudC1zaWQ= # base64 encoded Twilio SID
+  Sms__TwilioAuthToken: eW91ci10d2lsaW8tYXV0aC10b2tlbg== # base64 encoded Twilio token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: blockticket
+  labels:
+    app: notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-api
+        image: ndtuyen0604/notification-api:latest
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: notification-config
+        - secretRef:
+            name: notification-secret
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:16-alpine
+        command: 
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres-service -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+      - name: wait-for-rabbitmq
+        image: rabbitmq:3-management-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until rabbitmq-diagnostics -h rabbitmq-service check_port_connectivity; do
+            echo "Waiting for RabbitMQ..."
+            sleep 2
+          done
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: blockticket
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+
+
+
+
+
+
+
+
+
+

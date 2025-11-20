@@ -12,6 +12,7 @@ using MassTransit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Shared.Contracts.Events;
+using Identity.Domain.Interfaces;
 
 namespace Identity.Application.Features.Authentication.Commands;
 
@@ -74,18 +75,18 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
 
             // Create value objects
             var email = new Email(request.Email);
-            var walletAddress = !string.IsNullOrEmpty(request.WalletAddress) 
-                ? new WalletAddress(request.WalletAddress) 
+            var walletAddress = !string.IsNullOrEmpty(request.WalletAddress)
+                ? new WalletAddress(request.WalletAddress)
                 : null;
 
             // Register user through domain service
             var user = await _userDomainService.RegisterUserAsync(
-                email, 
-                request.Password, 
-                request.FirstName, 
-                request.LastName, 
-                userType, 
-                walletAddress, 
+                email,
+                request.Password,
+                request.FirstName,
+                request.LastName,
+                userType,
+                walletAddress,
                 cancellationToken);
 
             // Assign default role based on user type BEFORE adding to repository
@@ -144,7 +145,7 @@ public class RegisterUserCommandHandler : ICommandHandler<RegisterUserCommand, R
 
             user.ClearDomainEvents();
 
-            _logger.LogInformation("User {Email} registered successfully with ID {UserId}", 
+            _logger.LogInformation("User {Email} registered successfully with ID {UserId}",
                 user.Email.Value, user.Id);
 
             // Map to DTO

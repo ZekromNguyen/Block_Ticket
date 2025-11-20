@@ -1,6 +1,7 @@
 using Event.Application.Common.Interfaces;
 using Event.Application.Common.Models;
 using Event.Domain.Entities;
+using Event.Application.Interfaces.Infrastructure;
 using Event.Domain.Interfaces;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -13,12 +14,12 @@ namespace Event.Application.Features.Events.Queries.GetEvent;
 public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
 {
     private readonly IEventRepository _eventRepository;
-    private readonly ICacheService _cacheService;
+        private readonly IAdvancedCacheService _cacheService;
     private readonly ILogger<GetEventQueryHandler> _logger;
 
     public GetEventQueryHandler(
         IEventRepository eventRepository,
-        ICacheService cacheService,
+                IAdvancedCacheService cacheService,
         ILogger<GetEventQueryHandler> logger)
     {
         _eventRepository = eventRepository;
@@ -31,9 +32,9 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
         _logger.LogInformation("Getting event {EventId}", request.EventId);
 
         // Try to get from cache first
-        var cacheKey = GetCacheKey(request.EventId, request.IncludeTicketTypes, request.IncludePricingRules, request.IncludeAllocations);
+        var cacheKey = GetCacheKey(request.EventId, request.IncludeTicketTypes, request.IncludePricingRules);
         var cachedEvent = await _cacheService.GetAsync<EventDto>(cacheKey, cancellationToken);
-        
+
         if (cachedEvent != null)
         {
             _logger.LogDebug("Event {EventId} found in cache", request.EventId);
@@ -42,7 +43,7 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
 
         // Get from database
         var eventAggregate = await GetEventWithIncludes(request, cancellationToken);
-        
+
         if (eventAggregate == null)
         {
             _logger.LogInformation("Event {EventId} not found", request.EventId);
@@ -61,7 +62,7 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
 
     private async Task<EventAggregate?> GetEventWithIncludes(GetEventQuery request, CancellationToken cancellationToken)
     {
-        if (request.IncludeTicketTypes || request.IncludePricingRules || request.IncludeAllocations)
+        if (request.IncludeTicketTypes || request.IncludePricingRules)
         {
             // Get with full details
             return await _eventRepository.GetWithFullDetailsAsync(request.EventId, cancellationToken);
@@ -75,30 +76,7 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
 
     internal static EventDto MapToDto(EventAggregate eventAggregate, GetEventQuery request)
     {
-        var dto = new EventDto
-        {
-            Id = eventAggregate.Id,
-            Title = eventAggregate.Title,
-            Description = eventAggregate.Description,
-            Slug = eventAggregate.Slug.Value,
-            OrganizationId = eventAggregate.OrganizationId,
-            PromoterId = eventAggregate.PromoterId,
-            VenueId = eventAggregate.VenueId,
-            Status = eventAggregate.Status.ToString(),
-            EventDate = eventAggregate.EventDate,
-            TimeZone = eventAggregate.TimeZone.Value,
-            PublishStartDate = eventAggregate.PublishWindow?.StartDate,
-            PublishEndDate = eventAggregate.PublishWindow?.EndDate,
-            ImageUrl = eventAggregate.ImageUrl,
-            BannerUrl = eventAggregate.BannerUrl,
-            SeoTitle = eventAggregate.SeoTitle,
-            SeoDescription = eventAggregate.SeoDescription,
-            Categories = eventAggregate.Categories.ToList(),
-            Tags = eventAggregate.Tags.ToList(),
-            Version = eventAggregate.Version,
-            CreatedAt = eventAggregate.CreatedAt,
-            UpdatedAt = eventAggregate.UpdatedAt
-        };
+        var dto = EventDto.FromEntity(eventAggregate);
 
         // Map related entities based on request
         if (request.IncludeTicketTypes)
@@ -109,11 +87,6 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
         if (request.IncludePricingRules)
         {
             dto.PricingRules = eventAggregate.PricingRules.Select(MapPricingRuleToDto).ToList();
-        }
-
-        if (request.IncludeAllocations)
-        {
-            dto.Allocations = eventAggregate.Allocations.Select(MapAllocationToDto).ToList();
         }
 
         return dto;
@@ -180,39 +153,14 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
         };
     }
 
-    private static AllocationDto MapAllocationToDto(Allocation allocation)
-    {
-        return new AllocationDto
-        {
-            Id = allocation.Id,
-            EventId = allocation.EventId,
-            TicketTypeId = allocation.TicketTypeId,
-            Name = allocation.Name,
-            Description = allocation.Description,
-            Type = allocation.Type.ToString(),
-            Quantity = allocation.Quantity,
-            AllocatedQuantity = allocation.AllocatedQuantity,
-            AccessCode = allocation.AccessCode,
-            AvailableFrom = allocation.AvailableFrom,
-            AvailableUntil = allocation.AvailableUntil,
-            ExpiresAt = allocation.ExpiresAt,
-            IsActive = allocation.IsActive,
-            IsExpired = allocation.IsExpired,
-            AllowedUserIds = allocation.AllowedUserIds?.ToList(),
-            AllowedEmailDomains = allocation.AllowedEmailDomains?.ToList(),
-            AllocatedSeatIds = allocation.AllocatedSeatIds.ToList(),
-            CreatedAt = allocation.CreatedAt,
-            UpdatedAt = allocation.UpdatedAt
-        };
-    }
 
-    private static string GetCacheKey(Guid eventId, bool includeTicketTypes, bool includePricingRules, bool includeAllocations)
+
+    private static string GetCacheKey(Guid eventId, bool includeTicketTypes, bool includePricingRules)
     {
         var includes = new List<string>();
         if (includeTicketTypes) includes.Add("tickets");
         if (includePricingRules) includes.Add("pricing");
-        if (includeAllocations) includes.Add("allocations");
-        
+
         var includesStr = includes.Any() ? $":{string.Join(",", includes)}" : "";
         return $"event:{eventId}{includesStr}";
     }
@@ -224,12 +172,12 @@ public class GetEventQueryHandler : IRequestHandler<GetEventQuery, EventDto?>
 public class GetEventBySlugQueryHandler : IRequestHandler<GetEventBySlugQuery, EventDto?>
 {
     private readonly IEventRepository _eventRepository;
-    private readonly ICacheService _cacheService;
+        private readonly IAdvancedCacheService _cacheService;
     private readonly ILogger<GetEventBySlugQueryHandler> _logger;
 
     public GetEventBySlugQueryHandler(
         IEventRepository eventRepository,
-        ICacheService cacheService,
+                IAdvancedCacheService cacheService,
         ILogger<GetEventBySlugQueryHandler> logger)
     {
         _eventRepository = eventRepository;
@@ -239,13 +187,13 @@ public class GetEventBySlugQueryHandler : IRequestHandler<GetEventBySlugQuery, E
 
     public async Task<EventDto?> Handle(GetEventBySlugQuery request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Getting event by slug {Slug} for organization {OrganizationId}", 
+        _logger.LogInformation("Getting event by slug {Slug} for organization {OrganizationId}",
             request.Slug, request.OrganizationId);
 
         // Try to get from cache first
-        var cacheKey = GetCacheKey(request.Slug, request.OrganizationId, request.IncludeTicketTypes, request.IncludePricingRules, request.IncludeAllocations);
+        var cacheKey = GetCacheKey(request.Slug, request.OrganizationId, request.IncludeTicketTypes, request.IncludePricingRules);
         var cachedEvent = await _cacheService.GetAsync<EventDto>(cacheKey, cancellationToken);
-        
+
         if (cachedEvent != null)
         {
             _logger.LogDebug("Event with slug {Slug} found in cache", request.Slug);
@@ -254,16 +202,16 @@ public class GetEventBySlugQueryHandler : IRequestHandler<GetEventBySlugQuery, E
 
         // Get from database
         var eventAggregate = await _eventRepository.GetBySlugAsync(request.Slug, request.OrganizationId, cancellationToken);
-        
+
         if (eventAggregate == null)
         {
-            _logger.LogInformation("Event with slug {Slug} not found for organization {OrganizationId}", 
+            _logger.LogInformation("Event with slug {Slug} not found for organization {OrganizationId}",
                 request.Slug, request.OrganizationId);
             return null;
         }
 
         // Convert to DTO using the same mapping logic
-        var getEventQuery = new GetEventQuery(eventAggregate.Id, request.IncludeTicketTypes, request.IncludePricingRules, request.IncludeAllocations);
+        var getEventQuery = new GetEventQuery(eventAggregate.Id, request.IncludeTicketTypes, request.IncludePricingRules);
         var eventDto = GetEventQueryHandler.MapToDto(eventAggregate, getEventQuery);
 
         // Cache the result
@@ -273,13 +221,12 @@ public class GetEventBySlugQueryHandler : IRequestHandler<GetEventBySlugQuery, E
         return eventDto;
     }
 
-    private static string GetCacheKey(string slug, Guid organizationId, bool includeTicketTypes, bool includePricingRules, bool includeAllocations)
+    private static string GetCacheKey(string slug, Guid organizationId, bool includeTicketTypes, bool includePricingRules)
     {
         var includes = new List<string>();
         if (includeTicketTypes) includes.Add("tickets");
         if (includePricingRules) includes.Add("pricing");
-        if (includeAllocations) includes.Add("allocations");
-        
+
         var includesStr = includes.Any() ? $":{string.Join(",", includes)}" : "";
         return $"event:slug:{organizationId}:{slug}{includesStr}";
     }

@@ -20,15 +20,18 @@ public record CreateRoleCommand(
 public class CreateRoleCommandHandler : ICommandHandler<CreateRoleCommand, Result<RoleDto>>
 {
     private readonly IRoleRepository _roleRepository;
+    private readonly IPermissionRepository _permissionRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly ILogger<CreateRoleCommandHandler> _logger;
 
     public CreateRoleCommandHandler(
         IRoleRepository roleRepository,
+        IPermissionRepository permissionRepository,
         IAuditLogRepository auditLogRepository,
         ILogger<CreateRoleCommandHandler> logger)
     {
         _roleRepository = roleRepository;
+        _permissionRepository = permissionRepository;
         _auditLogRepository = auditLogRepository;
         _logger = logger;
     }
@@ -53,12 +56,14 @@ public class CreateRoleCommandHandler : ICommandHandler<CreateRoleCommand, Resul
             var role = new Role(request.Name, request.DisplayName, request.Description, roleType, false, request.Priority);
 
             // Add permissions
-            if (request.Permissions != null)
+            if (request.Permissions != null && request.Permissions.Any())
             {
-                foreach (var permissionDto in request.Permissions)
+                var permissionNames = request.Permissions.Select(p => $"{p.Resource}:{p.Action}").ToList();
+                var permissions = await _permissionRepository.GetPermissionsByNamesAsync(permissionNames, cancellationToken);
+
+                foreach (var permission in permissions)
                 {
-                    var permission = new Permission(role.Id, permissionDto.Resource, permissionDto.Action, permissionDto.Scope);
-                    role.AddPermission(permission);
+                    role.RolePermissions.Add(new RolePermission(role.Id, permission.Id));
                 }
             }
 
@@ -88,7 +93,7 @@ public class CreateRoleCommandHandler : ICommandHandler<CreateRoleCommand, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.Permissions.Select(p => new PermissionDto
+                Permissions = role.RolePermissions.Select(rp => rp.Permission).Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,
@@ -120,15 +125,18 @@ public record UpdateRoleCommand(
 public class UpdateRoleCommandHandler : ICommandHandler<UpdateRoleCommand, Result<RoleDto>>
 {
     private readonly IRoleRepository _roleRepository;
+    private readonly IPermissionRepository _permissionRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly ILogger<UpdateRoleCommandHandler> _logger;
 
     public UpdateRoleCommandHandler(
         IRoleRepository roleRepository,
+        IPermissionRepository permissionRepository,
         IAuditLogRepository auditLogRepository,
         ILogger<UpdateRoleCommandHandler> logger)
     {
         _roleRepository = roleRepository;
+        _permissionRepository = permissionRepository;
         _auditLogRepository = auditLogRepository;
         _logger = logger;
     }
@@ -148,11 +156,16 @@ public class UpdateRoleCommandHandler : ICommandHandler<UpdateRoleCommand, Resul
             role.SetPriority(request.Priority);
 
             // Update permissions
-            role.ClearPermissions();
-            foreach (var permissionDto in request.Permissions)
+            role.RolePermissions.Clear();
+            if (request.Permissions != null && request.Permissions.Any())
             {
-                var permission = new Permission(role.Id, permissionDto.Resource, permissionDto.Action, permissionDto.Scope);
-                role.AddPermission(permission);
+                var permissionNames = request.Permissions.Select(p => $"{p.Resource}:{p.Action}").ToList();
+                var permissions = await _permissionRepository.GetPermissionsByNamesAsync(permissionNames, cancellationToken);
+
+                foreach (var permission in permissions)
+                {
+                    role.RolePermissions.Add(new RolePermission(role.Id, permission.Id));
+                }
             }
 
             await _roleRepository.UpdateAsync(role, cancellationToken);
@@ -181,7 +194,7 @@ public class UpdateRoleCommandHandler : ICommandHandler<UpdateRoleCommand, Resul
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 Priority = role.Priority,
-                Permissions = role.Permissions.Select(p => new PermissionDto
+                Permissions = role.RolePermissions.Select(rp => rp.Permission).Select(p => new PermissionDto
                 {
                     Resource = p.Resource,
                     Action = p.Action,

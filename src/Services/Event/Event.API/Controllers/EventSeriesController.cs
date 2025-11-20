@@ -1,5 +1,9 @@
 using Event.Application.Common.Models;
 using Event.Application.Features.EventSeries.Commands.CreateEventSeries;
+using Event.Application.Features.EventSeries.Commands.UpdateEventSeries;
+using Event.Application.Features.EventSeries.Commands.DeleteEventSeries;
+using Event.Application.Features.EventSeries.Commands.ActivateEventSeries;
+using Event.Application.Features.EventSeries.Commands.DeactivateEventSeries;
 using Event.Application.Features.EventSeries.Queries.GetEventSeries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -78,6 +82,37 @@ public class EventSeriesController : ControllerBase
         return Ok(result);
     }
 
+
+    /// <summary>
+    /// Get event series by Slug
+    /// </summary>
+    /// <param name="organizationId">Organization ID</param>
+    /// <param name="slug">Event series slug</param>
+    /// <param name="includeEvents">Include events in the series</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Event series details</returns>
+    [HttpGet("by-slug/{organizationId:guid}/{slug}")]
+    [ProducesResponseType(typeof(EventSeriesDto), (int)HttpStatusCode.OK)]
+    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
+    public async Task<ActionResult<EventSeriesDto>> GetEventSeriesBySlug(
+        [FromRoute] Guid organizationId,
+        [FromRoute] string slug,
+        [FromQuery] bool includeEvents = false,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Getting event series by slug {Slug} for organization {OrganizationId}", slug, organizationId);
+
+        var query = new GetEventSeriesBySlugQuery(slug, organizationId, includeEvents);
+        var result = await _mediator.Send(query, cancellationToken);
+
+        if (result == null)
+        {
+            return NotFound($"Event series with slug '{slug}' not found for organization '{organizationId}'");
+        }
+
+        return Ok(result);
+    }
+
     /// <summary>
     /// Get event series list with filtering and pagination
     /// </summary>
@@ -91,7 +126,7 @@ public class EventSeriesController : ControllerBase
         [FromQuery] GetEventSeriesRequest request,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting event series list - Promoter: {PromoterId}, Active: {IsActive}", 
+        _logger.LogInformation("Getting event series list - Promoter: {PromoterId}, Active: {IsActive}",
             request.PromoterId, request.IsActive);
 
         var query = GetEventSeriesListQuery.FromRequest(request);
@@ -125,12 +160,32 @@ public class EventSeriesController : ControllerBase
         [FromHeader(Name = "If-Match")] int expectedVersion,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating event series {SeriesId} with expected version {ExpectedVersion}", 
+        _logger.LogInformation("Updating event series {SeriesId} with expected version {ExpectedVersion}",
             seriesId, expectedVersion);
 
-        // This would need to be implemented as an UpdateEventSeriesCommand
-        // For now, return a placeholder response
-        return BadRequest("Update event series not yet implemented");
+        try
+        {
+            var command = UpdateEventSeriesCommand.FromRequest(seriesId, request, expectedVersion);
+            var result = await _mediator.Send(command, cancellationToken);
+
+            _logger.LogInformation("Successfully updated event series {SeriesId}", seriesId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            _logger.LogWarning("Event series {SeriesId} not found", seriesId);
+            return NotFound($"Event series with ID {seriesId} not found");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Concurrency conflict"))
+        {
+            _logger.LogWarning("Concurrency conflict updating event series {SeriesId}: {Message}", seriesId, ex.Message);
+            return Conflict(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating event series {SeriesId}", seriesId);
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>
@@ -152,9 +207,34 @@ public class EventSeriesController : ControllerBase
     {
         _logger.LogInformation("Deleting event series {SeriesId}", seriesId);
 
-        // This would need to be implemented as a DeleteEventSeriesCommand
-        // For now, return a placeholder response
-        return BadRequest("Delete event series not yet implemented");
+        try
+        {
+            var command = new DeleteEventSeriesCommand(seriesId, expectedVersion);
+            var result = await _mediator.Send(command, cancellationToken);
+
+            if (result)
+            {
+                _logger.LogInformation("Successfully deleted event series {SeriesId}", seriesId);
+                return NoContent();
+            }
+
+            return BadRequest("Failed to delete event series");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            _logger.LogWarning("Event series {SeriesId} not found", seriesId);
+            return NotFound($"Event series with ID {seriesId} not found");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Concurrency conflict"))
+        {
+            _logger.LogWarning("Concurrency conflict deleting event series {SeriesId}: {Message}", seriesId, ex.Message);
+            return Conflict(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting event series {SeriesId}", seriesId);
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>
@@ -246,9 +326,29 @@ public class EventSeriesController : ControllerBase
     {
         _logger.LogInformation("Activating event series {SeriesId}", seriesId);
 
-        // This would need to be implemented as an ActivateEventSeriesCommand
-        // For now, return a placeholder response
-        return BadRequest("Activate event series not yet implemented");
+        try
+        {
+            var command = new ActivateEventSeriesCommand(seriesId, expectedVersion);
+            var result = await _mediator.Send(command, cancellationToken);
+
+            _logger.LogInformation("Successfully activated event series {SeriesId}", seriesId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            _logger.LogWarning("Event series {SeriesId} not found", seriesId);
+            return NotFound($"Event series with ID {seriesId} not found");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Concurrency conflict"))
+        {
+            _logger.LogWarning("Concurrency conflict activating event series {SeriesId}: {Message}", seriesId, ex.Message);
+            return Conflict(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error activating event series {SeriesId}", seriesId);
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>
@@ -270,9 +370,29 @@ public class EventSeriesController : ControllerBase
     {
         _logger.LogInformation("Deactivating event series {SeriesId}", seriesId);
 
-        // This would need to be implemented as a DeactivateEventSeriesCommand
-        // For now, return a placeholder response
-        return BadRequest("Deactivate event series not yet implemented");
+        try
+        {
+            var command = new DeactivateEventSeriesCommand(seriesId, expectedVersion);
+            var result = await _mediator.Send(command, cancellationToken);
+
+            _logger.LogInformation("Successfully deactivated event series {SeriesId}", seriesId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        {
+            _logger.LogWarning("Event series {SeriesId} not found", seriesId);
+            return NotFound($"Event series with ID {seriesId} not found");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("Concurrency conflict"))
+        {
+            _logger.LogWarning("Concurrency conflict deactivating event series {SeriesId}: {Message}", seriesId, ex.Message);
+            return Conflict(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deactivating event series {SeriesId}", seriesId);
+            return BadRequest(ex.Message);
+        }
     }
 }
 

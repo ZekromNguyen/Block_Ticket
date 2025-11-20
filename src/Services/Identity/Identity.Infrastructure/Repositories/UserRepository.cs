@@ -25,7 +25,8 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.Permissions)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
     }
 
@@ -36,7 +37,8 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.Permissions)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 
@@ -47,7 +49,8 @@ public class UserRepository : IUserRepository
             .Include(u => u.MfaDevices)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                    .ThenInclude(r => r.Permissions)
+                    .ThenInclude(r => r.RolePermissions)
+                        .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.WalletAddress == walletAddress, cancellationToken);
     }
 
@@ -55,6 +58,13 @@ public class UserRepository : IUserRepository
     {
         return await _context.Users
             .Where(u => u.UserType == userType)
+            .OrderBy(u => u.CreatedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
             .OrderBy(u => u.CreatedAt)
             .ToListAsync(cancellationToken);
     }
@@ -118,8 +128,8 @@ public class UserRepository : IUserRepository
     public async Task<IEnumerable<User>> GetLockedOutUsersAsync(CancellationToken cancellationToken = default)
     {
         return await _context.Users
-            .Where(u => u.Status == UserStatus.LockedOut && 
-                       u.LockedOutUntil.HasValue && 
+            .Where(u => u.Status == UserStatus.LockedOut &&
+                       u.LockedOutUntil.HasValue &&
                        u.LockedOutUntil.Value <= DateTime.UtcNow)
             .ToListAsync(cancellationToken);
     }

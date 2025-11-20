@@ -159,20 +159,17 @@ public class EventCancelledDomainEventHandler : IDomainEventHandler<EventCancell
     private readonly ICacheService _cacheService;
     private readonly IIntegrationEventPublisher _integrationEventPublisher;
     private readonly INotificationService _notificationService;
-    private readonly IReservationRepository _reservationRepository;
 
     public EventCancelledDomainEventHandler(
         ILogger<EventCancelledDomainEventHandler> logger,
         ICacheService cacheService,
         IIntegrationEventPublisher integrationEventPublisher,
-        INotificationService notificationService,
-        IReservationRepository reservationRepository)
+        INotificationService notificationService)
     {
         _logger = logger;
         _cacheService = cacheService;
         _integrationEventPublisher = integrationEventPublisher;
         _notificationService = notificationService;
-        _reservationRepository = reservationRepository;
     }
 
     public async Task Handle(EventCancelledDomainEvent notification, CancellationToken cancellationToken)
@@ -217,15 +214,10 @@ public class EventCancelledDomainEventHandler : IDomainEventHandler<EventCancell
 
     private async Task HandleActiveReservations(Guid eventId, CancellationToken cancellationToken)
     {
-        // Get all active reservations for the event
-        var activeReservations = await _reservationRepository.GetByEventIdAsync(eventId, cancellationToken);
-        
-        // Cancel active reservations (this would trigger their own domain events)
-        foreach (var reservation in activeReservations.Where(r => r.Status.Equals(Domain.Enums.ReservationStatus.Active)))
-        {
-            reservation.Cancel("Event cancelled");
-            await _reservationRepository.UpdateAsync(reservation, cancellationToken);
-        }
+        // Note: Reservation handling has been moved to the Ticketing Service
+        // The Ticketing Service will handle cancelling active reservations when it receives
+        // the EventCancelled integration event
+        await Task.CompletedTask;
     }
 
     private async Task InvalidateAllEventCaches(Guid eventId, CancellationToken cancellationToken)

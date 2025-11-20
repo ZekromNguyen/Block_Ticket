@@ -6,10 +6,15 @@ using Identity.Infrastructure.Configuration;
 using Identity.Infrastructure.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Versioning;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Reflection;
 using System.Threading.RateLimiting;
 using static Serilog.Log;
+using Identity.Domain.Repositories;
+using Identity.Domain.Services;
+using Identity.Infrastructure.Repositories;
+using Identity.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -163,9 +168,14 @@ builder.Services.AddHealthChecks()
 builder.Services.Configure<Identity.Application.Common.Configuration.ApplicationSettings>(
     builder.Configuration.GetSection(Identity.Application.Common.Configuration.ApplicationSettings.SectionName));
 
+
+
 // Add application layers
-builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
+builder.Services.AddApplication();
+
+// Add Message Broker
+builder.Services.AddMessageBroker(builder.Configuration);
 
 // Add performance monitoring
 builder.Services.AddScoped<Identity.API.Middleware.IPerformanceMetricsService, Identity.API.Middleware.PerformanceMetricsService>();
@@ -180,7 +190,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("RequireAdminRole", policy =>
         policy.RequireRole("admin", "super_admin"));
-    
+
     options.AddPolicy("RequirePromoterRole", policy =>
         policy.RequireRole("promoter", "admin", "super_admin"));
 });
@@ -212,7 +222,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "BlockTicket Identity API v1");
-        options.RoutePrefix = string.Empty; // Serve Swagger UI at root
+        options.RoutePrefix = "swagger"; // Serve Swagger UI at /swagger
     });
 }
 
@@ -232,6 +242,23 @@ app.MapHealthChecks("/health/ready");
 app.MapHealthChecks("/health/live");
 
 app.MapControllers();
+
+// Run database migrations
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<Identity.Infrastructure.Persistence.IdentityDbContext>();
+    try
+    {
+        Log.Information("Running database migrations...");
+        await dbContext.Database.MigrateAsync();
+        Log.Information("Database migrations completed successfully");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Error running database migrations");
+        throw;
+    }
+}
 
 // Seed OpenIddict data
 using (var scope = app.Services.CreateScope())

@@ -7,6 +7,7 @@ using Identity.Domain.Services;
 using Identity.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Identity.Domain.Interfaces;
 
 namespace Identity.Application.Features.Authentication.Commands;
 

@@ -46,9 +46,17 @@ public class EventDbContext : DbContext
     public DbSet<TicketType> TicketTypes { get; set; } = null!;
     public DbSet<PricingRule> PricingRules { get; set; } = null!;
     public DbSet<Allocation> Allocations { get; set; } = null!;
-    public DbSet<Reservation> Reservations { get; set; } = null!;
-    public DbSet<ReservationItem> ReservationItems { get; set; } = null!;
-    
+    public DbSet<SeatAllocation> SeatAllocations { get; set; } = null!;
+    public DbSet<Promoter> Promoters { get; set; } = null!;
+    public DbSet<Organization> Organizations { get; set; } = null!;
+
+    // Marketing Assets Entities
+    public DbSet<MarketingAsset> MarketingAssets { get; set; } = null!;
+    public DbSet<AssetVersion> AssetVersions { get; set; } = null!;
+    public DbSet<AssetCategory> AssetCategories { get; set; } = null!;
+    public DbSet<MarketingCampaign> MarketingCampaigns { get; set; } = null!;
+    public DbSet<CampaignVariant> CampaignVariants { get; set; } = null!;
+
     // Infrastructure Entities
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
 
@@ -62,7 +70,7 @@ public class EventDbContext : DbContext
     {
         // Add audit interceptor
         optionsBuilder.AddInterceptors(_auditInterceptor);
-        
+
         // Enable sensitive data logging in development
         if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
         {
@@ -76,6 +84,7 @@ public class EventDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         // Apply all configurations from the current assembly
+
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
 
         // Configure schema
@@ -88,16 +97,31 @@ public class EventDbContext : DbContext
         SetSoftDeleteFilter<TicketType>(modelBuilder);
         SetSoftDeleteFilter<PricingRule>(modelBuilder);
         SetSoftDeleteFilter<Allocation>(modelBuilder);
-        SetSoftDeleteFilter<Reservation>(modelBuilder);
+
+        // Marketing Assets soft delete filters
+        SetSoftDeleteFilter<MarketingAsset>(modelBuilder);
+        SetSoftDeleteFilter<AssetVersion>(modelBuilder);
+        SetSoftDeleteFilter<AssetCategory>(modelBuilder);
+        SetSoftDeleteFilter<MarketingCampaign>(modelBuilder);
+        SetSoftDeleteFilter<CampaignVariant>(modelBuilder);
 
         // Set up organization-based query filters for RLS
         SetOrganizationQueryFilters(modelBuilder);
 
         // Configure indexes for performance
         ConfigureIndexes(modelBuilder);
-        
+
         // Configure PostgreSQL specific features
-        ConfigurePostgreSqlFeatures(modelBuilder);
+        if (Database.ProviderName != "Npgsql.EntityFrameworkCore.PostgreSQL")
+        {
+            // SQLite does not support jsonb, so we'll use a text-based representation for JSON properties in tests.
+            modelBuilder.Entity<EventAggregate>().Property(e => e.Categories).HasConversion(new JsonValueConverter<IReadOnlyCollection<string>>());
+            modelBuilder.Entity<EventAggregate>().Property(e => e.Tags).HasConversion(new JsonValueConverter<IReadOnlyCollection<string>>());
+        }
+        else
+        {
+            ConfigurePostgreSqlFeatures(modelBuilder);
+        }
     }
 
     private static void SetSoftDeleteFilter<T>(ModelBuilder modelBuilder) where T : BaseAuditableEntity
@@ -129,14 +153,7 @@ public class EventDbContext : DbContext
 
     private static void ConfigurePostgreSqlFeatures(ModelBuilder modelBuilder)
     {
-        // Configure full-text search for events
-        modelBuilder.Entity<EventAggregate>()
-            .HasGeneratedTsVectorColumn(
-                e => e.SearchVector,
-                "english",
-                e => new { e.Title, e.Description })
-            .HasIndex(e => e.SearchVector)
-            .HasMethod("GIN");
+
 
         // Configure JSON columns for PostgreSQL
         modelBuilder.Entity<EventAggregate>()
@@ -217,7 +234,7 @@ public class EventDbContext : DbContext
     /// </summary>
     private async Task SetPostgreSqlSessionContextAsync()
     {
-        if (_httpContextAccessor?.HttpContext == null || _sessionManager == null)
+        if (_httpContextAccessor?.HttpContext == null || _sessionManager == null || !Database.IsRelational())
         {
             return;
         }
@@ -259,6 +276,27 @@ public class EventDbContext : DbContext
         // Event Series are directly organization-scoped
         modelBuilder.Entity<EventSeries>().HasQueryFilter(es =>
             GetCurrentOrganizationId() == Guid.Empty || es.OrganizationId == GetCurrentOrganizationId());
+
+        // Allocations are filtered through their relationship to events
+        modelBuilder.Entity<Allocation>().HasQueryFilter(a =>
+            GetCurrentOrganizationId() == Guid.Empty || a.Event.OrganizationId == GetCurrentOrganizationId());
+
+        // Marketing Assets are directly organization-scoped
+        modelBuilder.Entity<MarketingAsset>().HasQueryFilter(ma =>
+            GetCurrentOrganizationId() == Guid.Empty || ma.OrganizationId == GetCurrentOrganizationId());
+
+        modelBuilder.Entity<AssetCategory>().HasQueryFilter(ac =>
+            GetCurrentOrganizationId() == Guid.Empty || ac.OrganizationId == GetCurrentOrganizationId());
+
+        modelBuilder.Entity<MarketingCampaign>().HasQueryFilter(mc =>
+            GetCurrentOrganizationId() == Guid.Empty || mc.OrganizationId == GetCurrentOrganizationId());
+
+        // Asset versions and campaign variants are filtered through their parent entities
+        modelBuilder.Entity<AssetVersion>().HasQueryFilter(av =>
+            GetCurrentOrganizationId() == Guid.Empty || av.Asset.OrganizationId == GetCurrentOrganizationId());
+
+        modelBuilder.Entity<CampaignVariant>().HasQueryFilter(cv =>
+            GetCurrentOrganizationId() == Guid.Empty || cv.Campaign.OrganizationId == GetCurrentOrganizationId());
 
         // Other entities are filtered through their relationship to events
         // These filters are automatically applied by EF Core when querying

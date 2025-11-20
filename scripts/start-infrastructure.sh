@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+
 
 # Block Ticket Backend - Quick Start Script
 
@@ -7,7 +9,7 @@ echo "🚀 Starting Block Ticket Backend Infrastructure..."
 # Start infrastructure containers
 echo "📦 Starting infrastructure containers..."
 cd docker
-docker-compose -f docker-compose.infrastructure.yml up -d
+docker compose -f docker-compose.infrastructure.yml up -d
 
 echo "⏳ Waiting for services to be ready..."
 sleep 30
@@ -16,7 +18,7 @@ echo "✅ Infrastructure started successfully!"
 echo ""
 echo "📊 Available Services:"
 echo "- PostgreSQL (Identity): localhost:5432"
-echo "- PostgreSQL (Event): localhost:5433" 
+echo "- PostgreSQL (Event): localhost:5433"
 echo "- PostgreSQL (Ticketing): localhost:5434"
 echo "- Redis: localhost:6379"
 echo "- RabbitMQ: localhost:5672 (Management: http://localhost:15672)"

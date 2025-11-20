@@ -1,4 +1,4 @@
-using Identity.Application.Common.Interfaces;
+using Identity.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace Identity.Infrastructure.Persistence;

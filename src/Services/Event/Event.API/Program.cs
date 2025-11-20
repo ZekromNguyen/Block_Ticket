@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Serilog;
 using System.Reflection;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
@@ -41,12 +42,12 @@ builder.Services.AddVersionedApiExplorer(setup =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new() { 
-        Title = "Block Ticket Event API", 
+    c.SwaggerDoc("v1", new() {
+        Title = "Block Ticket Event API",
         Version = "v1",
         Description = "Event Service API for Block Ticket platform"
     });
-    
+
     // Include XML comments
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
@@ -154,27 +155,30 @@ app.MapHealthChecks("/health/ready");
 app.MapHealthChecks("/health/live");
 
 // Database migration and seeding
-using (var scope = app.Services.CreateScope())
+if (!app.Environment.IsEnvironment("Testing"))
 {
-    try
+    using (var scope = app.Services.CreateScope())
     {
-        var context = scope.ServiceProvider.GetRequiredService<EventDbContext>();
-        
-        // Apply pending migrations
-        if (context.Database.GetPendingMigrations().Any())
+        try
         {
-            Log.Information("Applying database migrations...");
-            await context.Database.MigrateAsync();
-            Log.Information("Database migrations applied successfully");
+            var context = scope.ServiceProvider.GetRequiredService<EventDbContext>();
+
+            // Apply pending migrations
+            if (context.Database.GetPendingMigrations().Any())
+            {
+                Log.Information("Applying database migrations...");
+                await context.Database.MigrateAsync();
+                Log.Information("Database migrations applied successfully");
+            }
+
+            // Seed data if needed
+            // await SeedData(context);
         }
-        
-        // Seed data if needed
-        // await SeedData(context);
-    }
-    catch (Exception ex)
-    {
-        Log.Fatal(ex, "An error occurred while migrating or seeding the database");
-        throw;
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "An error occurred while migrating or seeding the database");
+            throw;
+        }
     }
 }
 

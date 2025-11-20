@@ -57,46 +57,68 @@ public static class SeedData
             new Role("Fan", "Fan", "Basic user permissions", RoleType.Custom, false, 100),
             new Role("VenueStaff", "Venue Staff", "Ticket verification", RoleType.Custom, false, 300)
         };
-
-        // Add basic permissions to roles
-        foreach (var role in roles)
-        {
-            switch (role.Name)
-            {
-                case "SuperAdmin":
-                    role.AddPermission(new Permission(role.Id, "system", "manage"));
-                    role.AddPermission(new Permission(role.Id, "users", "manage"));
-                    role.AddPermission(new Permission(role.Id, "events", "manage"));
-                    role.AddPermission(new Permission(role.Id, "tickets", "manage"));
-                    role.AddPermission(new Permission(role.Id, "blockchain", "manage"));
-                    role.AddPermission(new Permission(role.Id, "payments", "manage"));
-                    break;
-                case "PlatformAdmin":
-                    role.AddPermission(new Permission(role.Id, "users", "manage"));
-                    role.AddPermission(new Permission(role.Id, "events", "read"));
-                    role.AddPermission(new Permission(role.Id, "tickets", "read"));
-                    role.AddPermission(new Permission(role.Id, "payments", "read"));
-                    break;
-                case "Promoter":
-                    role.AddPermission(new Permission(role.Id, "events", "write"));
-                    role.AddPermission(new Permission(role.Id, "venues", "write"));
-                    role.AddPermission(new Permission(role.Id, "tickets", "write"));
-                    role.AddPermission(new Permission(role.Id, "blockchain", "mint"));
-                    role.AddPermission(new Permission(role.Id, "blockchain", "burn"));
-                    break;
-                case "Fan":
-                    role.AddPermission(new Permission(role.Id, "events", "read"));
-                    role.AddPermission(new Permission(role.Id, "tickets", "purchase"));
-                    role.AddPermission(new Permission(role.Id, "tickets", "transfer"));
-                    break;
-                case "VenueStaff":
-                    role.AddPermission(new Permission(role.Id, "tickets", "verify"));
-                    role.AddPermission(new Permission(role.Id, "events", "read"));
-                    break;
-            }
-        }
-
         await context.Roles.AddRangeAsync(roles);
+        await context.SaveChangesAsync(); // Save roles to get Ids
+
+        var permissions = new List<Permission>
+        {
+            new Permission("system:manage", "Manage System", "system", "manage", "Identity"),
+            new Permission("users:manage", "Manage Users", "users", "manage", "Identity"),
+            new Permission("events:manage", "Manage Events", "events", "manage", "Event"),
+            new Permission("tickets:manage", "Manage Tickets", "tickets", "manage", "Ticketing"),
+            new Permission("blockchain:manage", "Manage Blockchain", "blockchain", "manage", "Blockchain"),
+            new Permission("payments:manage", "Manage Payments", "payments", "manage", "Payment"),
+            new Permission("events:read", "Read Events", "events", "read", "Event"),
+            new Permission("tickets:read", "Read Tickets", "tickets", "read", "Ticketing"),
+            new Permission("payments:read", "Read Payments", "payments", "read", "Payment"),
+            new Permission("events:write", "Write Events", "events", "write", "Event"),
+            new Permission("venues:write", "Write Venues", "venues", "write", "Event"),
+            new Permission("tickets:write", "Write Tickets", "tickets", "write", "Ticketing"),
+            new Permission("blockchain:mint", "Mint Blockchain Assets", "blockchain", "mint", "Blockchain"),
+            new Permission("blockchain:burn", "Burn Blockchain Assets", "blockchain", "burn", "Blockchain"),
+            new Permission("tickets:purchase", "Purchase Tickets", "tickets", "purchase", "Ticketing"),
+            new Permission("tickets:transfer", "Transfer Tickets", "tickets", "transfer", "Ticketing"),
+            new Permission("tickets:verify", "Verify Tickets", "tickets", "verify", "Ticketing")
+        };
+        await context.Permissions.AddRangeAsync(permissions);
+        await context.SaveChangesAsync(); // Save permissions to get Ids
+
+        var rolePermissions = new List<RolePermission>();
+        var superAdmin = roles.First(r => r.Name == "SuperAdmin");
+        var platformAdmin = roles.First(r => r.Name == "PlatformAdmin");
+        var promoter = roles.First(r => r.Name == "Promoter");
+        var fan = roles.First(r => r.Name == "Fan");
+        var venueStaff = roles.First(r => r.Name == "VenueStaff");
+
+        rolePermissions.AddRange(new[]
+        {
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "system:manage").Id),
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "users:manage").Id),
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "events:manage").Id),
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "tickets:manage").Id),
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "blockchain:manage").Id),
+            new RolePermission(superAdmin.Id, permissions.First(p => p.Name == "payments:manage").Id),
+
+            new RolePermission(platformAdmin.Id, permissions.First(p => p.Name == "users:manage").Id),
+            new RolePermission(platformAdmin.Id, permissions.First(p => p.Name == "events:read").Id),
+            new RolePermission(platformAdmin.Id, permissions.First(p => p.Name == "tickets:read").Id),
+            new RolePermission(platformAdmin.Id, permissions.First(p => p.Name == "payments:read").Id),
+
+            new RolePermission(promoter.Id, permissions.First(p => p.Name == "events:write").Id),
+            new RolePermission(promoter.Id, permissions.First(p => p.Name == "venues:write").Id),
+            new RolePermission(promoter.Id, permissions.First(p => p.Name == "tickets:write").Id),
+            new RolePermission(promoter.Id, permissions.First(p => p.Name == "blockchain:mint").Id),
+            new RolePermission(promoter.Id, permissions.First(p => p.Name == "blockchain:burn").Id),
+
+            new RolePermission(fan.Id, permissions.First(p => p.Name == "events:read").Id),
+            new RolePermission(fan.Id, permissions.First(p => p.Name == "tickets:purchase").Id),
+            new RolePermission(fan.Id, permissions.First(p => p.Name == "tickets:transfer").Id),
+
+            new RolePermission(venueStaff.Id, permissions.First(p => p.Name == "tickets:verify").Id),
+            new RolePermission(venueStaff.Id, permissions.First(p => p.Name == "events:read").Id)
+        });
+
+        await context.Set<RolePermission>().AddRangeAsync(rolePermissions);
         logger.LogInformation("Added {Count} roles with permissions", roles.Count);
     }
 

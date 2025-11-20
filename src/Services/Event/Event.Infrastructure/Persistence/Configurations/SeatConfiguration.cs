@@ -36,11 +36,7 @@ public class SeatConfiguration : IEntityTypeConfiguration<Seat>
         builder.Property(s => s.Notes)
             .HasMaxLength(500);
 
-        // Current allocation properties
-        builder.Property(s => s.CurrentReservationId);
-
-        builder.Property(s => s.ReservedUntil);
-
+        // Current allocation properties (Event Service only manages ticket type allocations)
         builder.Property(s => s.AllocatedToTicketTypeId);
 
         // Enum configuration
@@ -92,11 +88,6 @@ public class SeatConfiguration : IEntityTypeConfiguration<Seat>
             .HasForeignKey(s => s.VenueId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Optional relationship with current reservation
-        builder.HasIndex(s => s.CurrentReservationId)
-            .HasDatabaseName("IX_Seats_CurrentReservationId")
-            .HasFilter("\"CurrentReservationId\" IS NOT NULL");
-
         // Optional relationship with allocated ticket type
         builder.HasIndex(s => s.AllocatedToTicketTypeId)
             .HasDatabaseName("IX_Seats_AllocatedToTicketTypeId")
@@ -119,10 +110,7 @@ public class SeatConfiguration : IEntityTypeConfiguration<Seat>
             .HasDatabaseName("IX_Seats_Venue_PriceCategory")
             .HasFilter("\"PriceCategory\" IS NOT NULL");
 
-        // Index for expired reservations cleanup
-        builder.HasIndex(s => new { s.Status, s.ReservedUntil })
-            .HasDatabaseName("IX_Seats_Status_ReservedUntil")
-            .HasFilter("\"ReservedUntil\" IS NOT NULL");
+        // Note: Reservation-related indexes removed - managed by Ticket Service
 
         // Note: Section-based queries will use other available indexes
 

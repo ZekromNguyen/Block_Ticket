@@ -15,20 +15,17 @@ namespace Event.Application.Features.Events.Commands.CancelEvent;
 public class CancelEventCommandHandler : IRequestHandler<CancelEventCommand, EventDto>
 {
     private readonly IEventRepository _eventRepository;
-    private readonly IReservationRepository _reservationRepository;
     private readonly ILogger<CancelEventCommandHandler> _logger;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeProvider _dateTimeProvider;
 
     public CancelEventCommandHandler(
         IEventRepository eventRepository,
-        IReservationRepository reservationRepository,
         ILogger<CancelEventCommandHandler> logger,
         ICurrentUserService currentUserService,
         IDateTimeProvider dateTimeProvider)
     {
         _eventRepository = eventRepository;
-        _reservationRepository = reservationRepository;
         _logger = logger;
         _currentUserService = currentUserService;
         _dateTimeProvider = dateTimeProvider;
@@ -62,7 +59,7 @@ public class CancelEventCommandHandler : IRequestHandler<CancelEventCommand, Eve
             eventAggregate.Id, eventAggregate.Version);
 
         // Convert to DTO
-        var getEventQuery = new GetEventQuery(eventAggregate.Id, true, true, true);
+        var getEventQuery = new GetEventQuery(eventAggregate.Id, true, true);
         return GetEventQueryHandler.MapToDto(eventAggregate, getEventQuery);
     }
 
@@ -88,7 +85,7 @@ public class CancelEventCommandHandler : IRequestHandler<CancelEventCommand, Eve
     private void ValidateCancellationRules(EventAggregate eventAggregate)
     {
         // Cannot cancel already cancelled events
-        if (eventAggregate.Status == EventStatus.Cancelled)
+        if (eventAggregate.Status == EventStatus.Canceled)
         {
             throw new InvalidOperationException("Event is already cancelled");
         }
@@ -118,36 +115,11 @@ public class CancelEventCommandHandler : IRequestHandler<CancelEventCommand, Eve
 
     private async Task HandleActiveReservations(Guid eventId, CancellationToken cancellationToken)
     {
-        try
-        {
-            // Get all active reservations for the event
-            var activeReservations = await _reservationRepository.GetByEventIdAsync(eventId, cancellationToken);
-            
-            // Cancel active reservations
-            foreach (var reservation in activeReservations.Where(r => r.Status.Equals(Domain.Enums.ReservationStatus.Active)))
-            {
-                reservation.Cancel("Event cancelled");
-                await _reservationRepository.UpdateAsync(reservation, cancellationToken);
-                
-                _logger.LogInformation("Cancelled reservation {ReservationId} due to event cancellation", 
-                    reservation.Id);
-            }
+        // Note: Reservation handling has been moved to the Ticketing Service
+        // The Ticketing Service will handle cancelling active reservations when it receives
+        // the EventCancelled integration event
+        await Task.CompletedTask;
 
-            // Expire pending reservations
-            foreach (var reservation in activeReservations.Where(r => r.Status.Equals(Domain.Enums.ReservationStatus.Pending)))
-            {
-                reservation.Expire();
-                await _reservationRepository.UpdateAsync(reservation, cancellationToken);
-                
-                _logger.LogInformation("Expired reservation {ReservationId} due to event cancellation", 
-                    reservation.Id);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error handling active reservations for cancelled event {EventId}", eventId);
-            // Don't throw here - we still want the event cancellation to succeed
-            // The reservation cleanup can be handled by background processes if needed
-        }
+        _logger.LogInformation("Event cancellation will trigger reservation cleanup in Ticketing Service for event {EventId}", eventId);
     }
 }

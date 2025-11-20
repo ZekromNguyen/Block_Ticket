@@ -47,9 +47,7 @@ public class VenueRepository : BaseRepository<Venue>, IVenueRepository
         return await Context.Events
             .AnyAsync(e => e.VenueId == venueId && 
                           e.EventDate >= now && 
-                          (e.Status == EventStatus.Published || 
-                           e.Status == EventStatus.OnSale || 
-                           e.Status == EventStatus.SoldOut), 
+                          (e.Status == EventStatus.Published),
                      cancellationToken);
     }
 

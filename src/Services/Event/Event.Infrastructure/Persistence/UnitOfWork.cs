@@ -17,27 +17,39 @@ public class UnitOfWork : IUnitOfWork
     // Repository properties
     public IEventRepository Events { get; }
     public IVenueRepository Venues { get; }
-    public IReservationRepository Reservations { get; }
     public IPricingRuleRepository PricingRules { get; }
     public IEventSeriesRepository EventSeries { get; }
+    public IAllocationRepository Allocations { get; }
+
+    // Marketing Assets Repository properties
+    public IMarketingAssetRepository MarketingAssets { get; }
+    public IAssetCategoryRepository AssetCategories { get; }
+    public IMarketingCampaignRepository MarketingCampaigns { get; }
 
     public UnitOfWork(
         EventDbContext context,
         IEventRepository eventRepository,
         IVenueRepository venueRepository,
-        IReservationRepository reservationRepository,
         IPricingRuleRepository pricingRuleRepository,
         IEventSeriesRepository eventSeriesRepository,
+        IAllocationRepository allocationRepository,
+        IMarketingAssetRepository marketingAssetRepository,
+        IAssetCategoryRepository assetCategoryRepository,
+        IMarketingCampaignRepository marketingCampaignRepository,
         ILogger<UnitOfWork> logger)
     {
         _context = context;
         _logger = logger;
-        
+
         Events = eventRepository;
         Venues = venueRepository;
-        Reservations = reservationRepository;
         PricingRules = pricingRuleRepository;
         EventSeries = eventSeriesRepository;
+        Allocations = allocationRepository;
+
+        MarketingAssets = marketingAssetRepository;
+        AssetCategories = assetCategoryRepository;
+        MarketingCampaigns = marketingCampaignRepository;
     }
 
     /// <summary>

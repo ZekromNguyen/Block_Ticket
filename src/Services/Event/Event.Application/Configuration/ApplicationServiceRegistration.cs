@@ -29,8 +29,8 @@ public static class ApplicationServiceRegistration
         // Add Domain Event Handlers
         AddDomainEventHandlers(services);
 
-        // Add AutoMapper (if using)
-        // AddAutoMapper(services);
+        // Add AutoMapper
+        services.AddAutoMapper(Assembly.GetExecutingAssembly());
 
         return services;
     }
@@ -96,10 +96,6 @@ public static class ApplicationServiceRegistration
         services.AddScoped<EventPublishedDomainEventHandler>();
         services.AddScoped<EventCancelledDomainEventHandler>();
         services.AddScoped<InventoryChangedDomainEventHandler>();
-        services.AddScoped<ReservationCreatedDomainEventHandler>();
-        services.AddScoped<ReservationConfirmedDomainEventHandler>();
-        services.AddScoped<ReservationExpiredDomainEventHandler>();
-        services.AddScoped<ReservationCancelledDomainEventHandler>();
     }
 }
 

@@ -1,19 +1,23 @@
 using Identity.Application.Common.Models;
 using Identity.Application.DTOs;
 using Identity.Application.Features.Authentication.Commands;
+using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
+using Shared.Contracts.Events;
 
 namespace Identity.Application.Services;
 
 public class AuthenticationService : IAuthenticationService
 {
     private readonly IMediator _mediator;
+    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<AuthenticationService> _logger;
 
-    public AuthenticationService(IMediator mediator, ILogger<AuthenticationService> logger)
+    public AuthenticationService(IMediator mediator, IPublishEndpoint publishEndpoint, ILogger<AuthenticationService> logger)
     {
         _mediator = mediator;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
 
@@ -29,7 +33,22 @@ public class AuthenticationService : IAuthenticationService
             ipAddress,
             userAgent);
 
-        return await _mediator.Send(command);
+        var result = await _mediator.Send(command);
+
+        if (result.IsSuccess)
+        {
+            var userDto = result.Value!;
+            var integrationEvent = new UserCreatedIntegrationEvent(
+                userDto.Id,
+                userDto.Email,
+                userDto.FirstName,
+                userDto.LastName,
+                userDto.UserType);
+
+            await _publishEndpoint.Publish(integrationEvent);
+        }
+
+        return result;
     }
 
     public async Task<Result<LoginResultDto>> LoginAsync(LoginDto loginDto, string? ipAddress = null, string? userAgent = null)

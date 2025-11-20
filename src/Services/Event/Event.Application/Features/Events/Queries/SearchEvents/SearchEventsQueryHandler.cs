@@ -269,7 +269,7 @@ public class GetEventsQueryHandler : IRequestHandler<GetEventsQuery, PagedResult
             orderBy: BuildOrderBy(request.SortBy, request.SortDescending));
 
         // Convert to DTOs
-        var eventDtos = events.Select(e => MapToEventDto(e)).ToList();
+        var eventDtos = events.Select(EventDto.FromEntity).ToList();
 
         var result = new PagedResult<EventDto>
         {
@@ -352,36 +352,7 @@ public class GetEventsQueryHandler : IRequestHandler<GetEventsQuery, PagedResult
         };
     }
 
-    private static EventDto MapToEventDto(EventAggregate eventAggregate)
-    {
-        return new EventDto
-        {
-            Id = eventAggregate.Id,
-            Title = eventAggregate.Title,
-            Description = eventAggregate.Description,
-            Slug = eventAggregate.Slug.Value,
-            OrganizationId = eventAggregate.OrganizationId,
-            PromoterId = eventAggregate.PromoterId,
-            VenueId = eventAggregate.VenueId,
-            Status = eventAggregate.Status.ToString(),
-            EventDate = eventAggregate.EventDate,
-            TimeZone = eventAggregate.TimeZone.Value,
-            PublishStartDate = eventAggregate.PublishWindow?.StartDate,
-            PublishEndDate = eventAggregate.PublishWindow?.EndDate,
-            ImageUrl = eventAggregate.ImageUrl,
-            BannerUrl = eventAggregate.BannerUrl,
-            SeoTitle = eventAggregate.SeoTitle,
-            SeoDescription = eventAggregate.SeoDescription,
-            Categories = eventAggregate.Categories.ToList(),
-            Tags = eventAggregate.Tags.ToList(),
-            Version = eventAggregate.Version,
-            CreatedAt = eventAggregate.CreatedAt,
-            UpdatedAt = eventAggregate.UpdatedAt,
-            TicketTypes = new List<TicketTypeDto>(),
-            PricingRules = new List<PricingRuleDto>(),
-            Allocations = new List<AllocationDto>()
-        };
-    }
+
 
     private static string GenerateGetEventsCacheKey(GetEventsQuery request)
     {

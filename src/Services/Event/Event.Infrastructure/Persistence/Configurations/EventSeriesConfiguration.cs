@@ -63,11 +63,7 @@ public class EventSeriesConfiguration : IEntityTypeConfiguration<EventSeries>
         ConfigureSlug(builder);
         ConfigureCollections(builder);
 
-        // Indexes
-        ConfigureIndexes(builder);
 
-        // Constraints
-        ConfigureConstraints(builder);
     }
 
     private static void ConfigureSlug(EntityTypeBuilder<EventSeries> builder)
@@ -108,47 +104,5 @@ public class EventSeriesConfiguration : IEntityTypeConfiguration<EventSeries>
             .HasColumnName("tags");
     }
 
-    private static void ConfigureIndexes(EntityTypeBuilder<EventSeries> builder)
-    {
-        // Unique slug per organization
-        builder.HasIndex(es => new { es.OrganizationId, es.Slug })
-            .IsUnique()
-            .HasDatabaseName("IX_EventSeries_Organization_Slug");
 
-        // Performance indexes for common queries
-        builder.HasIndex(es => new { es.OrganizationId, es.IsActive })
-            .HasDatabaseName("IX_EventSeries_Organization_Active");
-
-        builder.HasIndex(es => es.PromoterId)
-            .HasDatabaseName("IX_EventSeries_PromoterId");
-
-        builder.HasIndex(es => new { es.IsActive, es.SeriesStartDate, es.SeriesEndDate })
-            .HasDatabaseName("IX_EventSeries_Active_Dates");
-
-        // Index for series with available slots
-        builder.HasIndex(es => new { es.IsActive, es.MaxEvents })
-            .HasDatabaseName("IX_EventSeries_Active_MaxEvents")
-            .HasFilter("\"MaxEvents\" IS NOT NULL");
-
-        // Index for name-based searches
-        builder.HasIndex(es => es.Name)
-            .HasDatabaseName("IX_EventSeries_Name");
-    }
-
-    private static void ConfigureConstraints(EntityTypeBuilder<EventSeries> builder)
-    {
-        // Check constraints for business rules
-        builder.HasCheckConstraint("CK_EventSeries_SeriesDates_Valid",
-            "\"SeriesStartDate\" IS NULL OR \"SeriesEndDate\" IS NULL OR \"SeriesStartDate\" < \"SeriesEndDate\"");
-
-        builder.HasCheckConstraint("CK_EventSeries_MaxEvents_Positive",
-            "\"MaxEvents\" IS NULL OR \"MaxEvents\" > 0");
-
-        builder.HasCheckConstraint("CK_EventSeries_Version_Positive",
-            "\"Version\" > 0");
-
-        // Ensure series dates are reasonable
-        builder.HasCheckConstraint("CK_EventSeries_SeriesStartDate_Valid",
-            "\"SeriesStartDate\" IS NULL OR \"SeriesStartDate\" >= \"CreatedAt\"");
-    }
 }

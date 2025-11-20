@@ -11,19 +11,17 @@ public record GetEventQuery : IRequest<EventDto?>
     public Guid EventId { get; init; }
     public bool IncludeTicketTypes { get; init; } = true;
     public bool IncludePricingRules { get; init; } = true;
-    public bool IncludeAllocations { get; init; } = true;
 
     public GetEventQuery(Guid eventId)
     {
         EventId = eventId;
     }
 
-    public GetEventQuery(Guid eventId, bool includeTicketTypes, bool includePricingRules, bool includeAllocations)
+    public GetEventQuery(Guid eventId, bool includeTicketTypes, bool includePricingRules)
     {
         EventId = eventId;
         IncludeTicketTypes = includeTicketTypes;
         IncludePricingRules = includePricingRules;
-        IncludeAllocations = includeAllocations;
     }
 }
 
@@ -36,7 +34,6 @@ public record GetEventBySlugQuery : IRequest<EventDto?>
     public Guid OrganizationId { get; init; }
     public bool IncludeTicketTypes { get; init; } = true;
     public bool IncludePricingRules { get; init; } = true;
-    public bool IncludeAllocations { get; init; } = true;
 
     public GetEventBySlugQuery(string slug, Guid organizationId)
     {
@@ -44,12 +41,11 @@ public record GetEventBySlugQuery : IRequest<EventDto?>
         OrganizationId = organizationId;
     }
 
-    public GetEventBySlugQuery(string slug, Guid organizationId, bool includeTicketTypes, bool includePricingRules, bool includeAllocations)
+    public GetEventBySlugQuery(string slug, Guid organizationId, bool includeTicketTypes, bool includePricingRules)
     {
         Slug = slug;
         OrganizationId = organizationId;
         IncludeTicketTypes = includeTicketTypes;
         IncludePricingRules = includePricingRules;
-        IncludeAllocations = includeAllocations;
     }
 }

@@ -13,6 +13,7 @@ public interface IUserRepository
     Task<bool> ExistsAsync(WalletAddress walletAddress, CancellationToken cancellationToken = default);
     Task AddAsync(User user, CancellationToken cancellationToken = default);
     Task UpdateAsync(User user, CancellationToken cancellationToken = default);
+    Task<IEnumerable<User>> GetAllAsync(CancellationToken cancellationToken = default);
     Task DeleteAsync(User user, CancellationToken cancellationToken = default);
     Task<IEnumerable<User>> GetLockedOutUsersAsync(CancellationToken cancellationToken = default);
     Task<IEnumerable<User>> GetUsersWithExpiredSessionsAsync(CancellationToken cancellationToken = default);

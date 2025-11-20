@@ -38,21 +38,7 @@ public interface IVenueService
     Task<SeatMapExportResult> ExportSeatMapAsync(Guid venueId, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Application service for reservation management
-/// </summary>
-public interface IReservationService
-{
-    Task<ReservationDto> CreateReservationAsync(CreateReservationRequest request, CancellationToken cancellationToken = default);
-    Task<ReservationDto> ConfirmReservationAsync(Guid reservationId, CancellationToken cancellationToken = default);
-    Task<ReservationDto> CancelReservationAsync(Guid reservationId, string reason, CancellationToken cancellationToken = default);
-    Task<ReservationDto> ExtendReservationAsync(Guid reservationId, TimeSpan extension, CancellationToken cancellationToken = default);
-    Task<ReservationDto?> GetReservationAsync(Guid reservationId, CancellationToken cancellationToken = default);
-    Task<ReservationDto?> GetReservationByNumberAsync(string reservationNumber, CancellationToken cancellationToken = default);
-    Task<PagedResult<ReservationDto>> GetUserReservationsAsync(Guid userId, GetReservationsRequest request, CancellationToken cancellationToken = default);
-    Task<PagedResult<ReservationDto>> GetEventReservationsAsync(Guid eventId, GetReservationsRequest request, CancellationToken cancellationToken = default);
-    Task<int> CleanupExpiredReservationsAsync(CancellationToken cancellationToken = default);
-}
+
 
 /// <summary>
 /// Application service for ticket type management
@@ -82,19 +68,7 @@ public interface IPricingService
     Task<bool> ValidateDiscountCodeAsync(string discountCode, Guid eventId, Guid userId, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Application service for allocation management
-/// </summary>
-public interface IAllocationService
-{
-    Task<AllocationDto> CreateAllocationAsync(CreateAllocationRequest request, CancellationToken cancellationToken = default);
-    Task<AllocationDto> UpdateAllocationAsync(Guid allocationId, UpdateAllocationRequest request, CancellationToken cancellationToken = default);
-    Task<AllocationDto?> GetAllocationAsync(Guid allocationId, CancellationToken cancellationToken = default);
-    Task<IEnumerable<AllocationDto>> GetEventAllocationsAsync(Guid eventId, CancellationToken cancellationToken = default);
-    Task<bool> DeleteAllocationAsync(Guid allocationId, CancellationToken cancellationToken = default);
-    Task<bool> ValidateAccessCodeAsync(string accessCode, Guid eventId, Guid userId, CancellationToken cancellationToken = default);
-    Task<AllocationAvailabilityDto> GetAllocationAvailabilityAsync(Guid allocationId, CancellationToken cancellationToken = default);
-}
+
 
 /// <summary>
 /// Application service for event series management
@@ -120,7 +94,6 @@ public interface IAvailabilityService
     Task<InventorySnapshotDto> GetInventorySnapshotAsync(Guid eventId, CancellationToken cancellationToken = default);
     Task<string> GetInventoryETagAsync(Guid eventId, CancellationToken cancellationToken = default);
     Task<bool> CheckSeatAvailabilityAsync(List<Guid> seatIds, CancellationToken cancellationToken = default);
-    Task<ReservationValidationResult> ValidateReservationRequestAsync(CreateReservationRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -146,5 +119,4 @@ public interface IReportingService
     Task<VenueUtilizationReportDto> GetVenueUtilizationReportAsync(Guid venueId, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
     Task<PromoterPerformanceReportDto> GetPromoterPerformanceReportAsync(Guid promoterId, DateTime startDate, DateTime endDate, CancellationToken cancellationToken = default);
     Task<InventoryReportDto> GetInventoryReportAsync(Guid eventId, CancellationToken cancellationToken = default);
-    Task<ReservationMetricsDto> GetReservationMetricsAsync(Guid eventId, CancellationToken cancellationToken = default);
 }

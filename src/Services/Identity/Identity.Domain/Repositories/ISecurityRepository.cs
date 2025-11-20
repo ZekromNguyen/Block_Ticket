@@ -23,6 +23,7 @@ public interface IAccountLockoutRepository
     Task<AccountLockout?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<AccountLockout?> GetActiveByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IEnumerable<AccountLockout>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IEnumerable<AccountLockout>> GetLockoutsAsync(Guid? userId, DateTime? fromDate, DateTime? toDate, CancellationToken cancellationToken = default);
     Task<IEnumerable<AccountLockout>> GetActiveLockoutsAsync(CancellationToken cancellationToken = default);
     Task<IEnumerable<AccountLockout>> GetExpiredLockoutsAsync(TimeSpan lockoutDuration, CancellationToken cancellationToken = default);
     Task AddAsync(AccountLockout lockout, CancellationToken cancellationToken = default);

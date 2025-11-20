@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-config
+  namespace: blockticket
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:80"
+  Authentication__Authority: "https://identity-service.blockticket.svc.cluster.local"
+  Authentication__Audience: "blockticket-api"
+  Application__BaseUrl: "https://blockticket.com"
+  Application__EmailConfirmationPath: "/confirm-email"
+  Application__PasswordResetPath: "/reset-password"
+  Security__RequireEmailConfirmation: "false"
+  Security__RequirePhoneConfirmation: "false"
+  Security__DefaultMfaEnabled: "false"
+  Security__MaxLoginAttempts: "10"
+  Security__LockoutDurationMinutes: "5"
+  Security__MonitoringIntervalMinutes: "5"
+  Security__DataRetentionDays: "90"
+  Email__SmtpHost: "mailhog-service"
+  Email__SmtpPort: "1025"
+  Email__FromEmail: "ndtuyen0604@gmail.com"
+  Email__FromName: "BlockTicket"
+  OpenIddict__TokenLifetimes__AccessToken: "60"
+  OpenIddict__TokenLifetimes__RefreshToken: "43200"
+  OpenIddict__TokenLifetimes__IdentityToken: "15"
+  RateLimiting__AuthEndpoints__PermitLimit: "10"
+  RateLimiting__AuthEndpoints__WindowMinutes: "1"
+  RateLimiting__MfaEndpoints__PermitLimit: "5"
+  RateLimiting__MfaEndpoints__WindowMinutes: "1"
+  RateLimiting__AdminEndpoints__PermitLimit: "100"
+  RateLimiting__AdminEndpoints__WindowMinutes: "1"
+  Cors__AllowedOrigins__0: "https://blockticket.com"
+  Cors__AllowedOrigins__1: "https://app.blockticket.com"
+  HealthChecks__UI__Enabled: "true"
+  HealthChecks__UI__Path: "/health-ui"
+  RabbitMQ__Host: "rabbitmq-service"
+  RabbitMQ__Username: "guest"
+  RabbitMQ__Password: "guest"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: identity-secret
+  namespace: blockticket
+type: Opaque
+data:
+  ConnectionStrings__DefaultConnection: SG9zdD1wb3N0Z3Jlcy1zZXJ2aWNlO0RhdGFiYXNlPUJsb2NrVGlja2V0X0lkZW50aXR5O1VzZXJuYW1lPXBvc3RncmVzO1Bhc3N3b3JkPXBvc3RncmVzO1BvcnQ9NTQzMjs=
+  ConnectionStrings__Redis: cmVkaXMtc2VydmljZTo2Mzc5LHBhc3N3b3JkPXJlZGlzX3Bhc3N3b3Jk
+  Security__JwtSecretKey: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1oZXJlLW1ha2UtaXQtbG9uZy1hbmQtcmFuZG9tLWZvci1wcm9kdWN0aW9u # base64 encoded JWT secret
+  Security__EncryptionKey: eW91ci1lbmNyeXB0aW9uLWtleS0zMi1jaGFyYWN0ZXJz # base64 encoded encryption key
+  JWT__SecretKey: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1oZXJlLW1ha2UtaXQtbG9uZy1hbmQtcmFuZG9t # base64 encoded JWT secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  namespace: blockticket
+  labels:
+    app: identity-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: identity-service
+  template:
+    metadata:
+      labels:
+        app: identity-service
+    spec:
+      containers:
+      - name: identity-api
+        image: ndtuyen0604/identity-api:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: identity-config
+        - secretRef:
+            name: identity-secret
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:16-alpine
+        command: 
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgres-service -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+      - name: wait-for-redis
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until redis-cli -h redis-service -p 6379 -a redis_password ping; do
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  namespace: blockticket
+spec:
+  selector:
+    app: identity-service
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+
+
+
+
+
+
+
+

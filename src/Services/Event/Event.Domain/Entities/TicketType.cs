@@ -173,13 +173,7 @@ public class TicketType : BaseAuditableEntity
         if (newTotalCapacity < Capacity.Reserved)
             throw new InventoryDomainException($"Cannot reduce capacity below reserved amount ({Capacity.Reserved})");
 
-        var availableChange = newTotalCapacity - Capacity.Total;
-        Capacity = new Capacity(newTotalCapacity);
-        
-        if (availableChange > 0)
-        {
-            Capacity = Capacity.Release(availableChange);
-        }
+        Capacity = new Capacity(newTotalCapacity, Capacity.Held, Capacity.Sold);
     }
 
     public Money GetTotalPrice()

@@ -163,48 +163,44 @@ public record DateTimeRange
 /// </summary>
 public record Capacity
 {
-    public int Total { get; }
-    public int Available { get; private set; }
-    public int Reserved => Total - Available;
+    public int Total { get; init; }
+    public int Held { get; init; }
+    public int Sold { get; init; }
+    public int Available => Total - Held - Sold;
+    public int Reserved => Held + Sold;
 
-    public Capacity(int total)
+    public Capacity(int total, int held = 0, int sold = 0)
     {
-        if (total < 0)
-            throw new ArgumentException("Total capacity cannot be negative", nameof(total));
+        if (total < 0) throw new ArgumentException("Total capacity cannot be negative.");
+        if (held < 0) throw new ArgumentException("Held capacity cannot be negative.");
+        if (sold < 0) throw new ArgumentException("Sold capacity cannot be negative.");
+        if (held + sold > total) throw new ArgumentException("Held and sold capacity cannot exceed total capacity.");
 
         Total = total;
-        Available = total;
+        Held = held;
+        Sold = sold;
     }
 
-    private Capacity(int total, int available)
-    {
-        Total = total;
-        Available = available;
-    }
+    public bool CanReserve(int quantity) => quantity > 0 && quantity <= Available;
 
     public Capacity Reserve(int quantity)
     {
-        if (quantity < 0)
-            throw new ArgumentException("Quantity cannot be negative", nameof(quantity));
-        
-        if (quantity > Available)
-            throw new InvalidOperationException("Not enough capacity available");
-
-        return new Capacity(Total, Available - quantity);
+        if (!CanReserve(quantity)) throw new InvalidOperationException("Not enough capacity available");
+        return this with { Held = Held + quantity };
     }
 
     public Capacity Release(int quantity)
     {
-        if (quantity < 0)
-            throw new ArgumentException("Quantity cannot be negative", nameof(quantity));
-        
-        var newAvailable = Math.Min(Total, Available + quantity);
-        return new Capacity(Total, newAvailable);
+        if (quantity <= 0) throw new ArgumentException("Quantity must be positive.");
+        if (quantity > Held) throw new InvalidOperationException("Cannot release more capacity than is held.");
+        return this with { Held = Held - quantity };
     }
 
-    public bool CanReserve(int quantity)
+    public Capacity Confirm(int quantity)
     {
-        return quantity >= 0 && quantity <= Available;
+        if (quantity <= 0) throw new ArgumentException("Quantity must be positive.");
+        if (quantity > Held) throw new InvalidOperationException("Cannot confirm more capacity than is held.");
+        return this with { Held = Held - quantity, Sold = Sold + quantity };
     }
 
     public decimal UtilizationPercentage => Total == 0 ? 0 : (decimal)Reserved / Total * 100;

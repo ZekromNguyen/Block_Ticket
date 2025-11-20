@@ -42,9 +42,9 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
             .IsRequired();
 
         // Configure relationships
-        builder.HasMany(r => r.Permissions)
-            .WithOne()
-            .HasForeignKey(p => p.RoleId)
+        builder.HasMany(r => r.RolePermissions)
+            .WithOne(rp => rp.Role)
+            .HasForeignKey(rp => rp.RoleId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(r => r.UserRoles)
@@ -80,62 +80,7 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
     }
 }
 
-public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
-{
-    public void Configure(EntityTypeBuilder<Permission> builder)
-    {
-        builder.ToTable("Permissions");
 
-        builder.HasKey(p => p.Id);
-
-        builder.Property(p => p.RoleId)
-            .IsRequired();
-
-        builder.Property(p => p.Resource)
-            .HasMaxLength(100)
-            .IsRequired();
-
-        builder.Property(p => p.Action)
-            .HasMaxLength(50)
-            .IsRequired();
-
-        builder.Property(p => p.Scope)
-            .HasMaxLength(100);
-
-        builder.Property(p => p.IsActive)
-            .IsRequired();
-
-        // Configure indexes for performance
-        builder.HasIndex(p => p.RoleId)
-            .HasDatabaseName("IX_Permissions_RoleId");
-
-        builder.HasIndex(p => p.Resource)
-            .HasDatabaseName("IX_Permissions_Resource");
-
-        builder.HasIndex(p => p.Action)
-            .HasDatabaseName("IX_Permissions_Action");
-
-        builder.HasIndex(p => new { p.Resource, p.Action })
-            .HasDatabaseName("IX_Permissions_Resource_Action");
-
-        builder.HasIndex(p => new { p.RoleId, p.Resource, p.Action })
-            .IsUnique()
-            .HasDatabaseName("IX_Permissions_RoleId_Resource_Action");
-
-        builder.HasIndex(p => p.IsActive)
-            .HasDatabaseName("IX_Permissions_IsActive");
-
-        // Configure audit fields
-        builder.Property(p => p.CreatedAt)
-            .IsRequired();
-
-        builder.HasIndex(p => p.CreatedAt)
-            .HasDatabaseName("IX_Permissions_CreatedAt");
-
-        // Ignore domain events
-        builder.Ignore(p => p.DomainEvents);
-    }
-}
 
 public class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
 {

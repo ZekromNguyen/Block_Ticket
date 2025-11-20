@@ -143,7 +143,7 @@ public static class RolePermissionSeeder
         foreach (var role in roles)
         {
             var existingRole = await context.Roles
-                .FirstOrDefaultAsync(r => r.NormalizedName == role.NormalizedName);
+                .FirstOrDefaultAsync(r => r.Name == role.Name);
 
             if (existingRole == null)
             {
@@ -374,7 +374,7 @@ public static class RolePermissionSeeder
     private static async Task AssignPermissionsToRole(IdentityDbContext context, string roleName, string[] permissionNames, ILogger logger)
     {
         // Use IgnoreQueryFilters to bypass soft delete filter
-        var role = await context.Roles.IgnoreQueryFilters().FirstOrDefaultAsync(r => r.NormalizedName == roleName);
+        var role = await context.Roles.IgnoreQueryFilters().FirstOrDefaultAsync(r => r.Name.ToUpper() == roleName);
         if (role == null)
         {
             logger.LogWarning("Role {RoleName} not found", roleName);

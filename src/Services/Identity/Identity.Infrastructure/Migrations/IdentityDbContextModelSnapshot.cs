@@ -409,8 +409,7 @@ namespace Identity.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -429,8 +428,7 @@ namespace Identity.Infrastructure.Migrations
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -443,17 +441,9 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_PasswordHistory_UserId");
+                    b.HasIndex("UserId");
 
-                    b.HasIndex("UserId", "CreatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("IX_PasswordHistory_UserId_CreatedAt");
-
-                    b.HasIndex("UserId", "PasswordHash")
-                        .HasDatabaseName("IX_PasswordHistory_UserId_PasswordHash");
-
-                    b.ToTable("PasswordHistory", "identity");
+                    b.ToTable("PasswordHistories", "identity");
                 });
 
             modelBuilder.Entity("Identity.Domain.Entities.Permission", b =>
@@ -464,8 +454,8 @@ namespace Identity.Infrastructure.Migrations
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -481,8 +471,8 @@ namespace Identity.Infrastructure.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
@@ -492,8 +482,8 @@ namespace Identity.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Resource")
                         .IsRequired()
@@ -501,13 +491,13 @@ namespace Identity.Infrastructure.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("Scope")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Service")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -517,15 +507,10 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("IX_Permissions_IsActive");
-
                     b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Permissions_Name");
+                        .IsUnique();
 
-                    b.HasIndex("Service", "Resource", "Action")
-                        .HasDatabaseName("IX_Permissions_Service_Resource_Action");
+                    b.HasIndex("Resource", "Action", "Service");
 
                     b.ToTable("Permissions", "identity");
                 });
@@ -684,11 +669,6 @@ namespace Identity.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("NormalizedName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<int>("Priority")
                         .HasColumnType("integer");
 
@@ -717,10 +697,6 @@ namespace Identity.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("IX_Roles_Name");
-
-                    b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("IX_Roles_NormalizedName");
 
                     b.HasIndex("Priority")
                         .HasDatabaseName("IX_Roles_Priority");
@@ -772,21 +748,9 @@ namespace Identity.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ExpiresAt")
-                        .HasDatabaseName("IX_RolePermissions_ExpiresAt");
+                    b.HasIndex("PermissionId");
 
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("IX_RolePermissions_IsActive");
-
-                    b.HasIndex("PermissionId")
-                        .HasDatabaseName("IX_RolePermissions_PermissionId");
-
-                    b.HasIndex("RoleId")
-                        .HasDatabaseName("IX_RolePermissions_RoleId");
-
-                    b.HasIndex("RoleId", "PermissionId")
-                        .IsUnique()
-                        .HasDatabaseName("IX_RolePermissions_RoleId_PermissionId");
+                    b.HasIndex("RoleId");
 
                     b.ToTable("RolePermissions", "identity");
                 });

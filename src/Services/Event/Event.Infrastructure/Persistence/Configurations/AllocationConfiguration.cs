@@ -2,6 +2,7 @@ using Event.Domain.Entities;
 using Event.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.Text.Json;
 
 namespace Event.Infrastructure.Persistence.Configurations;
 
@@ -22,20 +23,29 @@ public class AllocationConfiguration : IEntityTypeConfiguration<Allocation>
 
         builder.Property(a => a.TicketTypeId);
 
+        builder.Property(a => a.Type)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(20);
+
         builder.Property(a => a.Name)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(200);
 
         builder.Property(a => a.Description)
-            .HasMaxLength(500);
+            .HasMaxLength(1000);
 
-        builder.Property(a => a.TotalQuantity)
+        builder.Property(a => a.Scope)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(AllocationScope.ByQuantity);
+
+        // Quantity properties
+        builder.Property(a => a.Quantity)
             .IsRequired();
 
-        // Ignore computed property
-        builder.Ignore(a => a.Quantity);
-
-        builder.Property(a => a.AllocatedQuantity)
+        builder.Property(a => a.UsedQuantity)
             .IsRequired()
             .HasDefaultValue(0);
 
@@ -43,26 +53,37 @@ public class AllocationConfiguration : IEntityTypeConfiguration<Allocation>
         builder.Property(a => a.AccessCode)
             .HasMaxLength(50);
 
-        // Timing properties
-        builder.Property(a => a.AvailableFrom);
+        builder.Property(a => a.AllowedCustomerSegments)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+            .HasColumnType("jsonb");
 
-        builder.Property(a => a.AvailableUntil);
+        // Time windows
+        builder.Property(a => a.StartTime);
+        builder.Property(a => a.EndTime);
 
-        builder.Property(a => a.ExpiresAt);
+        // Capacity limits
+        builder.Property(a => a.MaxPerCustomer);
+        builder.Property(a => a.MinPerCustomer);
 
-        // Status
-        builder.Property(a => a.IsActive)
+        // Status and metadata
+        builder.Property(a => a.IsEnabled)
             .IsRequired()
             .HasDefaultValue(true);
 
-        // Enum configuration
-        builder.Property(a => a.Type)
+        builder.Property(a => a.Priority)
             .IsRequired()
-            .HasConversion<string>()
-            .HasMaxLength(20);
+            .HasDefaultValue(0);
 
-        // Collections configuration
-        ConfigureCollections(builder);
+
+        // Ignored properties
+        builder.Ignore(a => a.AllocatedSeats);
+        builder.Property(a => a.Metadata)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, object>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, object>())
+            .HasColumnType("jsonb");
 
         // Relationships
         ConfigureRelationships(builder);
@@ -74,98 +95,93 @@ public class AllocationConfiguration : IEntityTypeConfiguration<Allocation>
         ConfigureConstraints(builder);
     }
 
-    private static void ConfigureCollections(EntityTypeBuilder<Allocation> builder)
-    {
-        // Allowed user IDs as JSON
-        builder.Property(a => a.AllowedUserIds)
-            .HasConversion(
-                v => v != null && v.Any() ? System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null) : null,
-                v => !string.IsNullOrEmpty(v) ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) : null)
-            .HasColumnType("jsonb")
-            .HasColumnName("allowed_user_ids");
-
-        // Allowed email domains as JSON
-        builder.Property(a => a.AllowedEmailDomains)
-            .HasConversion(
-                v => v != null && v.Any() ? System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null) : null,
-                v => !string.IsNullOrEmpty(v) ? System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) : null)
-            .HasColumnType("jsonb")
-            .HasColumnName("allowed_email_domains");
-
-        // Allocated seat IDs as JSON
-        builder.Property(a => a.AllocatedSeatIds)
-            .HasConversion(
-                v => v != null && v.Any() ? System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null) : null,
-                v => !string.IsNullOrEmpty(v) ? System.Text.Json.JsonSerializer.Deserialize<List<Guid>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new List<Guid>() : new List<Guid>())
-            .HasColumnType("jsonb")
-            .HasColumnName("allocated_seat_ids");
-    }
-
     private static void ConfigureRelationships(EntityTypeBuilder<Allocation> builder)
     {
         // Many-to-one with Event
         builder.HasOne(a => a.Event)
-            .WithMany(e => e.Allocations)
+            .WithMany() // EventAggregate doesn't have Allocations navigation property yet
             .HasForeignKey(a => a.EventId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Optional many-to-one with TicketType
+        // Many-to-one with TicketType (optional)
         builder.HasOne(a => a.TicketType)
-            .WithMany()
+            .WithMany() // TicketType doesn't have Allocations navigation property yet
             .HasForeignKey(a => a.TicketTypeId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureIndexes(EntityTypeBuilder<Allocation> builder)
     {
-        // Performance indexes for common queries
-        builder.HasIndex(a => new { a.EventId, a.Type, a.IsActive })
-            .HasDatabaseName("IX_Allocations_Event_Type_Active");
-
-        builder.HasIndex(a => new { a.EventId, a.IsActive, a.AvailableFrom, a.AvailableUntil })
-            .HasDatabaseName("IX_Allocations_Event_Active_Available");
+        // Primary lookup indexes
+        builder.HasIndex(a => a.EventId)
+            .HasDatabaseName("IX_Allocations_EventId");
 
         builder.HasIndex(a => a.TicketTypeId)
             .HasDatabaseName("IX_Allocations_TicketTypeId")
             .HasFilter("\"TicketTypeId\" IS NOT NULL");
 
-        // Index for access code lookups
-        builder.HasIndex(a => new { a.AccessCode, a.IsActive })
-            .HasDatabaseName("IX_Allocations_AccessCode_Active")
+        builder.HasIndex(a => a.Type)
+            .HasDatabaseName("IX_Allocations_Type");
+
+        // Access code index (unique)
+        builder.HasIndex(a => a.AccessCode)
+            .HasDatabaseName("IX_Allocations_AccessCode")
+            .IsUnique()
             .HasFilter("\"AccessCode\" IS NOT NULL");
 
-        // Index for expired allocations cleanup
-        builder.HasIndex(a => new { a.IsActive, a.ExpiresAt })
-            .HasDatabaseName("IX_Allocations_Active_Expires")
-            .HasFilter("\"ExpiresAt\" IS NOT NULL");
+        // Composite indexes for common queries
+        builder.HasIndex(a => new { a.EventId, a.Type })
+            .HasDatabaseName("IX_Allocations_Event_Type");
 
-        // Index for availability window queries
-        builder.HasIndex(a => new { a.AvailableFrom, a.AvailableUntil })
-            .HasDatabaseName("IX_Allocations_AvailabilityWindow")
-            .HasFilter("\"AvailableFrom\" IS NOT NULL OR \"AvailableUntil\" IS NOT NULL");
+        builder.HasIndex(a => new { a.EventId, a.IsEnabled })
+            .HasDatabaseName("IX_Allocations_Event_Enabled");
+
+        builder.HasIndex(a => new { a.EventId, a.StartTime, a.EndTime })
+            .HasDatabaseName("IX_Allocations_Event_TimeWindow");
+
+        // Performance index for active allocations
+        builder.HasIndex(a => new { a.EventId, a.IsEnabled, a.StartTime, a.EndTime })
+            .HasDatabaseName("IX_Allocations_Event_Active")
+            .HasFilter("\"IsEnabled\" = true");
+
+        // Priority ordering index
+        builder.HasIndex(a => new { a.EventId, a.Priority, a.Name })
+            .HasDatabaseName("IX_Allocations_Event_Priority_Name");
     }
 
     private static void ConfigureConstraints(EntityTypeBuilder<Allocation> builder)
     {
         // Check constraints for business rules
-        builder.HasCheckConstraint("CK_Allocations_Type_Valid",
-            "\"Type\" IN ('Public', 'PromoterHold', 'ArtistHold', 'Presale', 'VIP', 'Press')");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_Quantity_Positive",
+            "\"Quantity\" > 0"));
 
-        builder.HasCheckConstraint("CK_Allocations_Quantity_Valid",
-            "\"TotalQuantity\" > 0 AND \"AllocatedQuantity\" >= 0 AND \"AllocatedQuantity\" <= \"TotalQuantity\"");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_UsedQuantity_NonNegative",
+            "\"UsedQuantity\" >= 0"));
 
-        builder.HasCheckConstraint("CK_Allocations_AvailabilityWindow_Valid",
-            "\"AvailableFrom\" IS NULL OR \"AvailableUntil\" IS NULL OR \"AvailableFrom\" < \"AvailableUntil\"");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_UsedQuantity_LessOrEqual_Quantity",
+            "\"UsedQuantity\" <= \"Quantity\""));
 
-        builder.HasCheckConstraint("CK_Allocations_ExpiresAt_Valid",
-            "\"ExpiresAt\" IS NULL OR \"ExpiresAt\" > \"CreatedAt\"");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_MaxPerCustomer_Positive",
+            "\"MaxPerCustomer\" IS NULL OR \"MaxPerCustomer\" > 0"));
 
-        builder.HasCheckConstraint("CK_Allocations_AccessCode_Consistency",
-            "(\"Type\" IN ('Presale', 'VIP') AND \"AccessCode\" IS NOT NULL) OR " +
-            "(\"Type\" NOT IN ('Presale', 'VIP'))");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_MinPerCustomer_Positive",
+            "\"MinPerCustomer\" IS NULL OR \"MinPerCustomer\" > 0"));
 
-        // Computed property constraint for IsExpired
-        builder.HasCheckConstraint("CK_Allocations_NotExpiredWhenActive",
-            "NOT \"IsActive\" OR \"ExpiresAt\" IS NULL OR \"ExpiresAt\" > NOW()");
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_MinMax_PerCustomer",
+            "\"MinPerCustomer\" IS NULL OR \"MaxPerCustomer\" IS NULL OR \"MinPerCustomer\" <= \"MaxPerCustomer\""));
+
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_TimeWindow",
+            "\"StartTime\" IS NULL OR \"EndTime\" IS NULL OR \"StartTime\" < \"EndTime\""));
+
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Allocations_Name_NotEmpty",
+            "LENGTH(TRIM(\"Name\")) > 0"));
     }
 }

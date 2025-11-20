@@ -36,6 +36,7 @@ public class EventsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Created event</returns>
     [HttpPost]
+    [Microsoft.AspNetCore.Authorization.Authorize]
     [ProducesResponseType(typeof(EventDto), (int)HttpStatusCode.Created)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.Conflict)]
@@ -70,12 +71,11 @@ public class EventsController : ControllerBase
         [FromRoute] Guid eventId,
         [FromQuery] bool includeTicketTypes = true,
         [FromQuery] bool includePricingRules = true,
-        [FromQuery] bool includeAllocations = true,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Getting event {EventId}", eventId);
 
-        var query = new GetEventQuery(eventId, includeTicketTypes, includePricingRules, includeAllocations);
+        var query = new GetEventQuery(eventId, includeTicketTypes, includePricingRules);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result == null)
@@ -104,17 +104,16 @@ public class EventsController : ControllerBase
         [FromRoute] string slug,
         [FromQuery] bool includeTicketTypes = true,
         [FromQuery] bool includePricingRules = true,
-        [FromQuery] bool includeAllocations = true,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting event by slug {Slug} for organization {OrganizationId}", slug, organizationId);
+        _logger.LogInformation("Getting event by slug {Slug}", slug);
 
-        var query = new GetEventBySlugQuery(slug, organizationId, includeTicketTypes, includePricingRules, includeAllocations);
+                var query = new GetEventBySlugQuery(slug, organizationId, includeTicketTypes, includePricingRules);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result == null)
         {
-            return NotFound($"Event with slug '{slug}' not found for organization '{organizationId}'");
+            return NotFound($"Event with slug '{slug}' not found");
         }
 
         return Ok(result);

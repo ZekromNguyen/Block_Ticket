@@ -58,7 +58,7 @@ public class EventSeries : BaseAuditableEntity
         Slug = Slug.FromString(slug);
         OrganizationId = organizationId;
         PromoterId = promoterId;
-        IsActive = true;
+        IsActive = false;
         Version = 1;
     }
 
@@ -157,6 +157,24 @@ public class EventSeries : BaseAuditableEntity
         var normalizedTag = tag.Trim().ToLowerInvariant();
         if (_tags.Remove(normalizedTag))
         {
+            Version++;
+        }
+    }
+
+    public void ClearCategories()
+    {
+        if (_categories.Any())
+        {
+            _categories.Clear();
+            Version++;
+        }
+    }
+
+    public void ClearTags()
+    {
+        if (_tags.Any())
+        {
+            _tags.Clear();
             Version++;
         }
     }

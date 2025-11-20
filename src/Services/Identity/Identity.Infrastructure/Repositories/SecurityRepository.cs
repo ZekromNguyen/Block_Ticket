@@ -237,6 +237,29 @@ public class AccountLockoutRepository : IAccountLockoutRepository
             .ToListAsync(cancellationToken);
     }
 
+
+    public async Task<IEnumerable<AccountLockout>> GetLockoutsAsync(Guid? userId, DateTime? fromDate, DateTime? toDate, CancellationToken cancellationToken = default)
+    {
+        var query = _context.AccountLockouts.AsQueryable();
+
+        if (userId.HasValue)
+        {
+            query = query.Where(al => al.UserId == userId.Value);
+        }
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(al => al.LockedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(al => al.LockedAt <= toDate.Value);
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(AccountLockout lockout, CancellationToken cancellationToken = default)
     {
         try

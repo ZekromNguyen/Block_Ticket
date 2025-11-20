@@ -56,7 +56,7 @@ public class PublishEventCommandHandler : IRequestHandler<PublishEventCommand, E
             eventAggregate.Id, eventAggregate.Version);
 
         // Convert to DTO
-        var getEventQuery = new GetEventQuery(eventAggregate.Id, true, true, true);
+        var getEventQuery = new GetEventQuery(eventAggregate.Id, true, true);
         return GetEventQueryHandler.MapToDto(eventAggregate, getEventQuery);
     }
 
@@ -81,22 +81,9 @@ public class PublishEventCommandHandler : IRequestHandler<PublishEventCommand, E
 
     private void ValidatePublishingRules(EventAggregate eventAggregate)
     {
-        // Cannot publish already published events
-        if (eventAggregate.Status == EventStatus.Published || eventAggregate.Status == EventStatus.OnSale)
+        if (eventAggregate.Status != EventStatus.Draft && eventAggregate.Status != EventStatus.Review)
         {
-            throw new InvalidOperationException("Event is already published");
-        }
-
-        // Cannot publish cancelled events
-        if (eventAggregate.Status == EventStatus.Cancelled)
-        {
-            throw new InvalidOperationException("Cannot publish cancelled events");
-        }
-
-        // Cannot publish sold out events
-        if (eventAggregate.Status == EventStatus.SoldOut)
-        {
-            throw new InvalidOperationException("Cannot publish sold out events");
+            throw new InvalidOperationException($"Cannot publish event in {eventAggregate.Status} status");
         }
 
         // Event must be in the future

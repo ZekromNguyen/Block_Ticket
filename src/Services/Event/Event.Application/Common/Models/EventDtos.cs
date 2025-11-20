@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Event.Domain.Enums;
 
 namespace Event.Application.Common.Models;
@@ -24,7 +25,8 @@ public record EventDto
     public Guid OrganizationId { get; init; }
     public Guid PromoterId { get; init; }
     public Guid VenueId { get; init; }
-    public string Status { get; init; } = string.Empty;
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public EventStatus Status { get; init; }
     public DateTime EventDate { get; init; }
     public DateTime StartDateTime { get; init; } // Start time of the event
     public DateTime EndDateTime { get; init; } // End time of the event
@@ -48,12 +50,53 @@ public record EventDto
     public DateTime? CancelledAt { get; init; }
     public string? CancellationReason { get; init; }
     public DateTimeRangeDto? PublishWindow { get; init; }
-    
+
     // Navigation properties
     public List<TicketTypeDto> TicketTypes { get; set; } = new();
     public List<PricingRuleDto> PricingRules { get; set; } = new();
-    public List<AllocationDto> Allocations { get; set; } = new();
+
+
+
+    public static EventDto FromEntity(Domain.Entities.EventAggregate entity)
+    {
+        return new EventDto
+        {
+            Id = entity.Id,
+            Title = entity.Title,
+            Name = entity.Title,
+            Description = entity.Description ?? string.Empty,
+            Slug = entity.Slug.Value,
+            OrganizationId = entity.OrganizationId,
+            PromoterId = entity.PromoterId,
+            VenueId = entity.VenueId,
+            Status = entity.Status,
+            EventDate = entity.EventDate,
+            StartDateTime = entity.StartDateTime,
+            EndDateTime = entity.EndDateTime,
+            TimeZone = entity.TimeZone.Value,
+            PublishStartDate = entity.PublishWindow?.StartDate,
+            PublishEndDate = entity.PublishWindow?.EndDate,
+            ImageUrl = entity.ImageUrl,
+            BannerUrl = entity.BannerUrl,
+            SeoTitle = entity.SeoTitle,
+            SeoDescription = entity.SeoDescription,
+            Categories = entity.Categories.ToList(),
+            Tags = entity.Tags.ToList(),
+            Version = entity.Version,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            TotalCapacity = entity.TotalCapacity,
+            AvailableCapacity = entity.GetTotalAvailableCapacity(),
+            PublishedAt = entity.PublishedAt,
+            CancelledAt = entity.CancelledAt,
+            CancellationReason = entity.CancellationReason,
+            PublishWindow = entity.PublishWindow != null ? new DateTimeRangeDto { Start = entity.PublishWindow.StartDate, End = entity.PublishWindow.EndDate } : null,
+            TicketTypes = new List<TicketTypeDto>(), // This should be mapped separately
+            PricingRules = new List<PricingRuleDto>() // This should be mapped separately
+        };
+    }
 }
+
 
 /// <summary>
 /// Event catalog DTO for public listing
@@ -71,15 +114,15 @@ public record EventCatalogDto
     public string Status { get; init; } = string.Empty;
     public List<string> Categories { get; init; } = new();
     public List<string> Tags { get; init; } = new();
-    
+
     // Venue information
     public VenueSummaryDto Venue { get; init; } = null!;
-    
+
     // Pricing information
     public decimal? MinPrice { get; init; }
     public decimal? MaxPrice { get; init; }
     public string Currency { get; init; } = "USD";
-    
+
     // Availability
     public bool HasAvailability { get; init; }
     public int TotalCapacity { get; init; }
@@ -109,13 +152,13 @@ public record EventDetailDto
     public string? BannerUrl { get; init; }
     public List<string> Categories { get; init; } = new();
     public List<string> Tags { get; init; } = new();
-    
+
     // Venue information
     public VenueDto Venue { get; init; } = null!;
-    
+
     // Ticket types
     public List<TicketTypePublicDto> TicketTypes { get; init; } = new();
-    
+
     // Availability
     public EventAvailabilityDto Availability { get; init; } = null!;
 }
@@ -181,13 +224,47 @@ public record EventSeriesDto
     public bool IsActive { get; init; }
     public string? ImageUrl { get; init; }
     public string? BannerUrl { get; init; }
+    public string? SeoTitle { get; init; }
+    public string? SeoDescription { get; init; }
     public List<string> Categories { get; init; } = new();
     public List<string> Tags { get; init; } = new();
     public List<Guid> EventIds { get; init; } = new();
     public int Version { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
+    public string? CreatedBy { get; init; }
+    public string? UpdatedBy { get; init; }
+
+    public static EventSeriesDto FromEntity(Domain.Entities.EventSeries entity)
+    {
+        return new EventSeriesDto
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description ?? string.Empty,
+            Slug = entity.Slug.Value,
+            OrganizationId = entity.OrganizationId,
+            PromoterId = entity.PromoterId,
+            SeriesStartDate = entity.SeriesStartDate,
+            SeriesEndDate = entity.SeriesEndDate,
+            MaxEvents = entity.MaxEvents,
+            IsActive = entity.IsActive,
+            ImageUrl = entity.ImageUrl,
+            BannerUrl = entity.BannerUrl,
+            SeoTitle = entity.SeoTitle,
+            SeoDescription = entity.SeoDescription,
+            Categories = entity.Categories.ToList(),
+            Tags = entity.Tags.ToList(),
+            EventIds = entity.EventIds.ToList(),
+            Version = entity.Version,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            CreatedBy = entity.CreatedBy,
+            UpdatedBy = entity.UpdatedBy
+        };
+    }
 }
+
 
 /// <summary>
 /// Create event series request
@@ -215,12 +292,15 @@ public record UpdateEventSeriesRequest
 {
     public string? Name { get; init; }
     public string? Description { get; init; }
+    public string? Slug { get; init; }
     public DateTime? SeriesStartDate { get; init; }
     public DateTime? SeriesEndDate { get; init; }
     public int? MaxEvents { get; init; }
     public bool? IsActive { get; init; }
     public string? ImageUrl { get; init; }
     public string? BannerUrl { get; init; }
+    public string? SeoTitle { get; init; }
+    public string? SeoDescription { get; init; }
     public List<string>? Categories { get; init; }
     public List<string>? Tags { get; init; }
 }

@@ -1,6 +1,9 @@
 using FluentValidation;
 using Identity.Application.Services;
 using Identity.Domain.Services;
+using Identity.Domain.Repositories;
+using Identity.Infrastructure.Services;
+using Identity.Infrastructure.Repositories;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
@@ -30,6 +33,24 @@ public static class DependencyInjection
         // Add Domain Services
         services.AddScoped<UserDomainService>();
 
+
+        // Add Infrastructure Services
+        services.AddScoped<ISecurityNotificationService, SecurityNotificationService>();
+        services.AddScoped<ISecurityService, SecurityService>();
+        services.AddScoped<IPasswordService, PasswordService>();
+        services.AddScoped<IMfaService, MfaService>();
+        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<ISessionManagementService, SessionManagementService>();
+        services.AddScoped<IPasswordHistoryService, PasswordHistoryService>();
+        services.AddScoped<IDiscordNotificationService, DiscordNotificationService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<ISmsService, SmsService>();
+
+        // Add Infrastructure Repositories
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
+        services.AddScoped<ISuspiciousActivityRepository, SuspiciousActivityRepository>();
+        services.AddScoped<IAccountLockoutRepository, AccountLockoutRepository>();
         // Add Validation Behavior
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
@@ -65,7 +86,7 @@ public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TReques
             if (failures.Any())
             {
                 var errorMessages = failures.Select(f => f.ErrorMessage).ToList();
-                
+
                 // If TResponse is Result or Result<T>, return failure result
                 if (typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Identity.Application.Common.Models.Result<>))
                 {
@@ -73,7 +94,7 @@ public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TReques
                     var failureMethod = typeof(Identity.Application.Common.Models.Result<>)
                         .MakeGenericType(resultType)
                         .GetMethod("Failure", new[] { typeof(List<string>) });
-                    
+
                     return (TResponse)failureMethod!.Invoke(null, new object[] { errorMessages })!;
                 }
                 else if (typeof(TResponse) == typeof(Identity.Application.Common.Models.Result))

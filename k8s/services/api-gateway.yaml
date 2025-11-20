@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: blockticket
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:80"
+  Logging__LogLevel__Default: "Information"
+  Logging__LogLevel__Microsoft.AspNetCore: "Warning"
+  IdentityServer__Authority: "http://identity-service"
+  ReverseProxy__Routes__identity-route__ClusterId: "identity-cluster"
+  ReverseProxy__Routes__identity-route__Match__Path: "/api/identity/{**catch-all}"
+  ReverseProxy__Routes__event-route__ClusterId: "event-cluster"
+  ReverseProxy__Routes__event-route__Match__Path: "/api/events/{**catch-all}"
+  ReverseProxy__Routes__ticketing-route__ClusterId: "ticketing-cluster"
+  ReverseProxy__Routes__ticketing-route__Match__Path: "/api/tickets/{**catch-all}"
+  ReverseProxy__Routes__payment-route__ClusterId: "payment-cluster"
+  ReverseProxy__Routes__payment-route__Match__Path: "/api/payments/{**catch-all}"
+  ReverseProxy__Routes__notification-route__ClusterId: "notification-cluster"
+  ReverseProxy__Routes__notification-route__Match__Path: "/api/notifications/{**catch-all}"
+  ReverseProxy__Clusters__identity-cluster__Destinations__destination1__Address: "http://identity-service"
+  ReverseProxy__Clusters__event-cluster__Destinations__destination1__Address: "http://event-service"
+  ReverseProxy__Clusters__ticketing-cluster__Destinations__destination1__Address: "http://ticketing-service"
+  ReverseProxy__Clusters__payment-cluster__Destinations__destination1__Address: "http://payment-service"
+  ReverseProxy__Clusters__notification-cluster__Destinations__destination1__Address: "http://notification-service"
+  AllowedHosts: "*"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: blockticket
+  labels:
+    app: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: blockticket/api-gateway:latest
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef:
+            name: api-gateway-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: blockticket
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+
+
+
+
+
+
+
+
+
+
+

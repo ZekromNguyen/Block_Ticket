@@ -1,6 +1,7 @@
 using Event.Domain.Entities;
 using Event.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using Event.Domain.ValueObjects;
 
 namespace Event.Infrastructure.Persistence.Repositories;
 
@@ -28,15 +29,19 @@ public class EventSeriesRepository : BaseRepository<EventSeries>, IEventSeriesRe
             .FirstOrDefaultAsync(s => s.Id == seriesId, cancellationToken);
     }
 
-    public async Task<EventSeries?> GetBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default)
+    public async Task<EventSeries?> GetBySlugAsync(string slug, Guid organizationId, bool includeEvents, CancellationToken cancellationToken = default)
     {
+        // Note: includeEvents is not used here as there's no direct navigation property.
+        // Event loading should be handled in the application layer if required.
+        var slugValueObject = new Slug(slug);
         return await DbSet
-            .FirstOrDefaultAsync(s => s.Slug.Value == slug && s.OrganizationId == organizationId, cancellationToken);
+            .FirstOrDefaultAsync(s => s.Slug == slugValueObject && s.OrganizationId == organizationId, cancellationToken);
     }
 
     public async Task<bool> IsSlugUniqueAsync(string slug, Guid organizationId, Guid? excludeSeriesId = null, CancellationToken cancellationToken = default)
     {
-        var query = DbSet.Where(s => s.Slug.Value == slug && s.OrganizationId == organizationId);
+        var slugValueObject = new Slug(slug);
+        var query = DbSet.Where(s => s.Slug == slugValueObject && s.OrganizationId == organizationId);
 
         if (excludeSeriesId.HasValue)
         {
@@ -63,8 +68,8 @@ public class EventSeriesRepository : BaseRepository<EventSeries>, IEventSeriesRe
     }
 
     public async Task<IEnumerable<EventSeries>> GetSeriesByDateRangeAsync(
-        DateTime startDate, 
-        DateTime endDate, 
+        DateTime startDate,
+        DateTime endDate,
         CancellationToken cancellationToken = default)
     {
         return await DbSet
@@ -91,7 +96,7 @@ public class EventSeriesRepository : BaseRepository<EventSeries>, IEventSeriesRe
     public async Task<IEnumerable<EventSeries>> GetSeriesRequiringMaintenanceAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        
+
         return await DbSet
             .Where(s => s.IsActive && s.SeriesEndDate.HasValue && s.SeriesEndDate.Value < now)
             .ToListAsync(cancellationToken);

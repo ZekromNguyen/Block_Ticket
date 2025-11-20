@@ -58,7 +58,7 @@ public class EventService : IEventService
 
         _logger.LogInformation("Created event {EventId}", eventAggregate.Id);
 
-        return MapToDto(eventAggregate);
+        return EventDto.FromEntity(eventAggregate);
     }
 
     public async Task<EventDto> UpdateEventAsync(Guid eventId, UpdateEventRequest request, CancellationToken cancellationToken = default)
@@ -86,19 +86,19 @@ public class EventService : IEventService
 
         _logger.LogInformation("Updated event {EventId}", eventId);
 
-        return MapToDto(eventAggregate);
+        return EventDto.FromEntity(eventAggregate);
     }
 
     public async Task<EventDto?> GetEventAsync(Guid eventId, CancellationToken cancellationToken = default)
     {
         var eventAggregate = await _eventRepository.GetByIdAsync(eventId, cancellationToken);
-        return eventAggregate != null ? MapToDto(eventAggregate) : null;
+        return eventAggregate != null ? EventDto.FromEntity(eventAggregate) : null;
     }
 
     public async Task<EventDto?> GetEventBySlugAsync(string slug, Guid organizationId, CancellationToken cancellationToken = default)
     {
         var eventAggregate = await _eventRepository.GetBySlugAsync(slug, organizationId, cancellationToken);
-        return eventAggregate != null ? MapToDto(eventAggregate) : null;
+        return eventAggregate != null ? EventDto.FromEntity(eventAggregate) : null;
     }
 
     public async Task<PagedResult<EventDto>> GetEventsAsync(GetEventsRequest request, CancellationToken cancellationToken = default)
@@ -109,7 +109,7 @@ public class EventService : IEventService
             predicate: null, // Add filtering logic here
             orderBy: q => q.OrderBy(e => e.StartDateTime));
 
-        var eventDtos = events.Select(MapToDto).ToList();
+        var eventDtos = events.Select(EventDto.FromEntity).ToList();
 
         return new PagedResult<EventDto>
         {
@@ -135,7 +135,7 @@ public class EventService : IEventService
             request.PageSize,
             cancellationToken);
 
-        var eventDtos = events.Select(MapToDto).ToList();
+        var eventDtos = events.Select(EventDto.FromEntity).ToList();
 
         return new PagedResult<EventDto>
         {
@@ -164,7 +164,7 @@ public class EventService : IEventService
 
         _logger.LogInformation("Published event {EventId}", eventId);
 
-        return MapToDto(eventAggregate);
+        return EventDto.FromEntity(eventAggregate);
     }
 
     public async Task<EventDto> CancelEventAsync(Guid eventId, string reason, CancellationToken cancellationToken = default)
@@ -185,7 +185,7 @@ public class EventService : IEventService
 
         _logger.LogInformation("Cancelled event {EventId}", eventId);
 
-        return MapToDto(eventAggregate);
+        return EventDto.FromEntity(eventAggregate);
     }
 
     public async Task<bool> DeleteEventAsync(Guid eventId, CancellationToken cancellationToken = default)
@@ -211,36 +211,5 @@ public class EventService : IEventService
         return await _eventRepository.IsSlugAvailableAsync(slug, organizationId, excludeEventId, cancellationToken);
     }
 
-    private static EventDto MapToDto(EventAggregate eventAggregate)
-    {
-        return new EventDto
-        {
-            Id = eventAggregate.Id,
-            Name = eventAggregate.Name,
-            Title = eventAggregate.Title,
-            Description = eventAggregate.Description,
-            Slug = eventAggregate.Slug.Value,
-            OrganizationId = eventAggregate.OrganizationId,
-            PromoterId = eventAggregate.PromoterId,
-            VenueId = eventAggregate.VenueId,
-            EventDate = eventAggregate.EventDate,
-            StartDateTime = eventAggregate.StartDateTime,
-            EndDateTime = eventAggregate.EndDateTime,
-            TimeZone = eventAggregate.TimeZone.Value,
-            Status = eventAggregate.Status.ToString(),
-            ImageUrl = eventAggregate.ImageUrl,
-            BannerUrl = eventAggregate.BannerUrl,
-            SeoTitle = eventAggregate.SeoTitle,
-            SeoDescription = eventAggregate.SeoDescription,
-            Categories = eventAggregate.Categories.ToList(),
-            Tags = eventAggregate.Tags.ToList(),
-            Version = eventAggregate.Version,
-            TotalCapacity = eventAggregate.TotalCapacity,
-            PublishedAt = eventAggregate.PublishedAt,
-            CancelledAt = eventAggregate.CancelledAt,
-            CancellationReason = eventAggregate.CancellationReason,
-            CreatedAt = eventAggregate.CreatedAt,
-            UpdatedAt = eventAggregate.UpdatedAt
-        };
-    }
+
 }

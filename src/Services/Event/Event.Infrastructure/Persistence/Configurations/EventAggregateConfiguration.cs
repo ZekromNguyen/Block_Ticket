@@ -11,6 +11,8 @@ namespace Event.Infrastructure.Persistence.Configurations;
 /// </summary>
 public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggregate>
 {
+
+
     public void Configure(EntityTypeBuilder<EventAggregate> builder)
     {
         // Table configuration
@@ -39,6 +41,7 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
             .IsRequired();
 
         builder.Property(e => e.Version)
+            .IsConcurrencyToken()
             .IsRequired()
             .HasDefaultValue(1);
 
@@ -85,10 +88,7 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
             .HasColumnType("jsonb")
             .HasColumnName("tags");
 
-        // PostgreSQL search vector
-        builder.Property(e => e.SearchVector)
-            .HasColumnType("tsvector")
-            .HasComputedColumnSql("to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))", stored: true);
+
 
         // Relationships
         ConfigureRelationships(builder);
@@ -96,11 +96,10 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
         // Indexes
         ConfigureIndexes(builder);
 
-        // Constraints
-        ConfigureConstraints(builder);
+
     }
 
-    private static void ConfigureSlug(EntityTypeBuilder<EventAggregate> builder)
+    private void ConfigureSlug(EntityTypeBuilder<EventAggregate> builder)
     {
         builder.Property(e => e.Slug)
             .IsRequired()
@@ -111,7 +110,7 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
             .HasColumnName("slug");
     }
 
-    private static void ConfigureTimeZone(EntityTypeBuilder<EventAggregate> builder)
+    private void ConfigureTimeZone(EntityTypeBuilder<EventAggregate> builder)
     {
         builder.Property(e => e.TimeZone)
             .IsRequired()
@@ -122,7 +121,7 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
             .HasColumnName("time_zone");
     }
 
-    private static void ConfigureDateTimeRange(EntityTypeBuilder<EventAggregate> builder)
+    private void ConfigureDateTimeRange(EntityTypeBuilder<EventAggregate> builder)
     {
         builder.OwnsOne(e => e.PublishWindow, pw =>
         {
@@ -141,7 +140,7 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
         });
     }
 
-    private static void ConfigureRelationships(EntityTypeBuilder<EventAggregate> builder)
+    private void ConfigureRelationships(EntityTypeBuilder<EventAggregate> builder)
     {
         // One-to-many with TicketTypes
         builder.HasMany(e => e.TicketTypes)
@@ -149,24 +148,23 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
             .HasForeignKey(t => t.EventId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.Metadata.FindNavigation(nameof(EventAggregate.TicketTypes))!
+            .SetPropertyAccessMode(PropertyAccessMode.Field);
+
         // One-to-many with PricingRules
         builder.HasMany(e => e.PricingRules)
             .WithOne()
             .HasForeignKey(p => p.EventId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // One-to-many with Allocations
-        builder.HasMany(e => e.Allocations)
-            .WithOne(a => a.Event)
-            .HasForeignKey(a => a.EventId)
-            .OnDelete(DeleteBehavior.Cascade);
+
 
         // Foreign key to Venue (no navigation property configured here)
         builder.HasIndex(e => e.VenueId)
             .HasDatabaseName("IX_Events_VenueId");
     }
 
-    private static void ConfigureIndexes(EntityTypeBuilder<EventAggregate> builder)
+    private void ConfigureIndexes(EntityTypeBuilder<EventAggregate> builder)
     {
         // Unique slug per organization
         builder.HasIndex(e => new { e.OrganizationId, e.Slug })
@@ -186,31 +184,10 @@ public class EventAggregateConfiguration : IEntityTypeConfiguration<EventAggrega
         builder.HasIndex(e => e.VenueId)
             .HasDatabaseName("IX_Events_VenueId");
 
-        // Search index
-        builder.HasIndex(e => e.SearchVector)
-            .HasMethod("GIN")
-            .HasDatabaseName("IX_Events_SearchVector");
 
-        // Partial indexes for active events
-        builder.HasIndex(e => new { e.EventDate, e.Status })
-            .HasFilter("\"Status\" IN ('Published', 'OnSale')")
-            .HasDatabaseName("IX_Events_ActiveEvents");
+
+
     }
 
-    private static void ConfigureConstraints(EntityTypeBuilder<EventAggregate> builder)
-    {
-        // Check constraints
-        builder.HasCheckConstraint("CK_Events_EventDate_Future",
-            "\"EventDate\" > \"CreatedAt\"");
 
-        builder.HasCheckConstraint("CK_Events_PublishWindow_Valid",
-            "publish_start_date IS NULL OR publish_end_date IS NULL OR publish_start_date < publish_end_date");
-
-        builder.HasCheckConstraint("CK_Events_Version_Positive",
-            "\"Version\" > 0");
-
-        // Status transitions constraint (business rule enforcement)
-        builder.HasCheckConstraint("CK_Events_Status_Valid",
-            "\"Status\" IN ('Draft', 'Review', 'Published', 'OnSale', 'SoldOut', 'Completed', 'Cancelled', 'Archived')");
-    }
 }

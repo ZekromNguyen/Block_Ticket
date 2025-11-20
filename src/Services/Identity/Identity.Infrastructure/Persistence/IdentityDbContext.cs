@@ -19,6 +19,8 @@ public class IdentityDbContext : DbContext
     public DbSet<Role> Roles { get; set; } = null!;
     public DbSet<Permission> Permissions { get; set; } = null!;
     public DbSet<UserRole> UserRoles { get; set; } = null!;
+    public DbSet<PasswordHistory> PasswordHistories { get; set; } = null!;
+    public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<SecurityEvent> SecurityEvents { get; set; } = null!;
     public DbSet<AccountLockout> AccountLockouts { get; set; } = null!;
     public DbSet<SuspiciousActivity> SuspiciousActivities { get; set; } = null!;

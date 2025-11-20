@@ -4,8 +4,8 @@ namespace Identity.Domain.Entities;
 
 public class Role : BaseAuditableEntity
 {
-    private readonly List<Permission> _permissions = new();
-    private readonly List<UserRole> _userRoles = new();
+    public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 
     public string Name { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
@@ -15,8 +15,7 @@ public class Role : BaseAuditableEntity
     public bool IsActive { get; private set; }
     public int Priority { get; private set; } // Higher number = higher priority
 
-    public IReadOnlyCollection<Permission> Permissions => _permissions.AsReadOnly();
-    public IReadOnlyCollection<UserRole> UserRoles => _userRoles.AsReadOnly();
+
 
     private Role() { } // For EF Core
 
@@ -65,79 +64,10 @@ public class Role : BaseAuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddPermission(Permission permission)
-    {
-        if (_permissions.Any(p => p.Resource == permission.Resource && p.Action == permission.Action))
-            return; // Permission already exists
 
-        _permissions.Add(permission);
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void RemovePermission(string resource, string action)
-    {
-        if (IsSystemRole)
-            throw new InvalidOperationException("System role permissions cannot be modified");
-
-        var permission = _permissions.FirstOrDefault(p => p.Resource == resource && p.Action == action);
-        if (permission != null)
-        {
-            _permissions.Remove(permission);
-            UpdatedAt = DateTime.UtcNow;
-        }
-    }
-
-    public void ClearPermissions()
-    {
-        if (IsSystemRole)
-            throw new InvalidOperationException("System role permissions cannot be modified");
-
-        _permissions.Clear();
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public bool HasPermission(string resource, string action)
-    {
-        return _permissions.Any(p => p.Resource == resource && p.Action == action && p.IsActive);
-    }
-
-    public bool HasAnyPermission(string resource)
-    {
-        return _permissions.Any(p => p.Resource == resource && p.IsActive);
-    }
 }
 
-public class Permission : BaseEntity
-{
-    public Guid RoleId { get; private set; }
-    public string Resource { get; private set; } = string.Empty;
-    public string Action { get; private set; } = string.Empty;
-    public string? Scope { get; private set; }
-    public bool IsActive { get; private set; }
 
-    private Permission() { } // For EF Core
-
-    public Permission(Guid roleId, string resource, string action, string? scope = null)
-    {
-        RoleId = roleId;
-        Resource = resource;
-        Action = action;
-        Scope = scope;
-        IsActive = true;
-    }
-
-    public void Activate()
-    {
-        IsActive = true;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void Deactivate()
-    {
-        IsActive = false;
-        UpdatedAt = DateTime.UtcNow;
-    }
-}
 
 public class UserRole : BaseEntity
 {

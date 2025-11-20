@@ -1,5 +1,6 @@
 namespace Event.Application.Common.Models;
 
+
 /// <summary>
 /// Update ticket type request
 /// </summary>
