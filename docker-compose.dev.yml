@@ -69,6 +69,87 @@ services:
     networks:
       - blockticket-network
 
+  # Application service definitions are included for P0 topology awareness.
+  # Add Dockerfiles for each service before running these containers directly.
+  ticketing-api:
+    image: blockticket-ticketing-api:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Ticketing/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Ticketing;Username=postgres;Password=postgres;Port=5432
+      - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+      - IdentityServer__Authority=http://identity-api
+    ports:
+      - "5003:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  blockchain-orchestrator:
+    image: blockticket-blockchain-orchestrator:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/BlockchainOrchestrator/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Blockchain;Username=postgres;Password=postgres;Port=5432
+      - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+      - Blockchain__ContractAddress=0x0000000000000000000000000000000000000000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  notification-worker:
+    image: blockticket-notification-worker:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Notification/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Notification;Username=postgres;Password=postgres;Port=5432
+      - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  verification-api:
+    image: blockticket-verification-api:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Verification/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Verification;Username=postgres;Password=postgres;Port=5432
+      - IdentityServer__Authority=http://identity-api
+      - Services__Ticketing=http://ticketing-api
+    ports:
+      - "5005:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ticketing-api:
+        condition: service_started
+    networks:
+      - blockticket-network
+
 volumes:
   postgres_data:
     driver: local

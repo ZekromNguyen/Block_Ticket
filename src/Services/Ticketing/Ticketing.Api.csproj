@@ -10,14 +10,27 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
+    <PackageReference Include="MediatR" Version="12.2.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Shared\Common\Shared.Common.csproj" />
     <ProjectReference Include="..\..\Shared\Contracts\Shared.Contracts.csproj" />
+    <ProjectReference Include="Ticketing.Application\Ticketing.Application.csproj" />
+    <ProjectReference Include="Ticketing.Infrastructure\Ticketing.Infrastructure.csproj" />
+    <ProjectReference Include="Ticketing.Domain\Ticketing.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Ticketing.Application\**\*.cs" />
+    <Compile Remove="Ticketing.Infrastructure\**\*.cs" />
+    <Compile Remove="Ticketing.Domain\**\*.cs" />
+    <Compile Remove="Data\**\*.cs" />
+    <Compile Remove="Models\**\*.cs" />
+    <Compile Remove="Migrations\**\*.cs" />
+    <Compile Remove="Ticketing.Tests\**\*.cs" />
   </ItemGroup>
 
 </Project>
