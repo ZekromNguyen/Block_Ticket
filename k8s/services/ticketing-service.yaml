@@ -2,28 +2,18 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ticketing-config
-  namespace: blockticket
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  ASPNETCORE_URLS: "http://+:80"
+  ASPNETCORE_URLS: "http://+:8080"
   Logging__LogLevel__Default: "Information"
   Logging__LogLevel__Microsoft.AspNetCore: "Warning"
   Logging__LogLevel__Microsoft.EntityFrameworkCore: "Warning"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ticketing-secret
-  namespace: blockticket
-type: Opaque
-data:
-  ConnectionStrings__DefaultConnection: SG9zdD1wb3N0Z3Jlcy1zZXJ2aWNlO1BvcnQ9NTQzMjtEYXRhYmFzZT1CbG9ja1RpY2tldF9UaWNrZXRpbmc7VXNlcm5hbWU9cG9zdGdyZXM7UGFzc3dvcmQ9cG9zdGdyZXM7SW5jbHVkZSBFcnJvciBEZXRhaWw9dHJ1ZQ== # base64 encoded connection string
----
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ticketing-service
-  namespace: blockticket
   labels:
     app: ticketing-service
 spec:
@@ -38,9 +28,10 @@ spec:
     spec:
       containers:
       - name: ticketing-api
-        image: ndtuyen0604/ticketing-api:latest
+        image: ghcr.io/your-org/blockticket/ticketing-api:0.0.0-placeholder
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         envFrom:
         - configMapRef:
             name: ticketing-config
@@ -49,13 +40,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
         readinessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 20
           periodSeconds: 10
         resources:
@@ -65,6 +56,22 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
       initContainers:
       - name: wait-for-postgres
         image: postgres:16-alpine
@@ -77,26 +84,17 @@ spec:
             sleep 2
           done
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
   name: ticketing-service
-  namespace: blockticket
 spec:
   selector:
     app: ticketing-service
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 80
-    targetPort: 80
+    targetPort: 8080
   type: ClusterIP
-
-
-
-
-
-
-
-
-
-

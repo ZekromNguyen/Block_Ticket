@@ -1,0 +1,118 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+permissions:
+  contents: read
+  security-events: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}-${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+      - name: Check Dockerfiles
+        shell: bash
+        run: |
+          required=(
+            "src/Services/Identity/Identity.API/Dockerfile"
+            "src/ApiGateway/Dockerfile"
+            "src/Services/Event/Event.API/Dockerfile"
+            "src/Services/Ticketing/Dockerfile"
+            "src/Services/Notification/Dockerfile"
+            "src/Services/BlockchainOrchestrator/Dockerfile"
+            "src/Services/Resale/Dockerfile"
+            "src/Services/Verification/Dockerfile"
+          )
+
+          for dockerfile in "${required[@]}"; do
+            test -f "$dockerfile" || {
+              echo "::error file=$dockerfile::Missing Dockerfile"
+              exit 1
+            }
+          done
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        shell: bash
+        run: |
+          cd infra/terraform/aws
+          terraform fmt -check -recursive -diff
+
+      - name: Terraform validate
+        shell: bash
+        run: |
+          for dir in \
+            infra/terraform/aws/bootstrap \
+            infra/terraform/aws/modules/platform \
+            infra/terraform/aws/modules/external-secrets-irsa \
+            infra/terraform/aws/environments/dev \
+            infra/terraform/aws/environments/staging \
+            infra/terraform/aws/environments/prod; do
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" validate
+          done
+
+      - name: Run checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/terraform/aws
+          quiet: true
+          compact: true
+          framework: terraform
+          skip_check: CKV_AWS_144,CKV_AWS_145,CKV_AWS_18,CKV_AWS_293,CKV2_AWS_6
+
+      - name: Kustomize smoke - dev overlay
+        shell: bash
+        run: kubectl kustomize k8s/overlays/dev >/dev/null
+
+      - name: Kustomize smoke - staging overlay
+        shell: bash
+        run: kubectl kustomize k8s/overlays/staging >/dev/null
+
+      - name: Kustomize smoke - prod overlay
+        shell: bash
+        run: kubectl kustomize k8s/overlays/prod >/dev/null
+
+  format:
+    name: .NET Format Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: dotnet format
+        run: dotnet format BlockTicket.sln --verify-no-changes --verbosity normal

@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: blockticket
+  namespace: argocd
+spec:
+  description: BlockTicket application and platform resources
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: blockticket
+      server: https://kubernetes.default.svc
+    - namespace: blockticket-dev
+      server: https://kubernetes.default.svc
+    - namespace: blockticket-staging
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: external-secrets
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

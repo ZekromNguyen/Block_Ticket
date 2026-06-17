@@ -27,6 +27,42 @@ public sealed record VerifyTicketRequest(Guid TicketId, string VerificationCode,
 
 public sealed record VerifyTicketResponse(Guid TicketId, bool Accepted, string Reason, TicketDto? Ticket);
 
+public sealed record ResaleListTicketRequest(Guid TicketId, Guid SellerUserId, decimal Price);
+
+public sealed record ResalePurchaseTicketRequest(Guid TicketId, Guid BuyerUserId, string PaymentMethod);
+
+public sealed record CancelResaleRequest(Guid TicketId, Guid SellerUserId, string Reason);
+
+public sealed record WaitingListJoinRequest(Guid UserId, Guid EventId, Guid TicketTypeId);
+
+public sealed record WaitingListOfferRequest(Guid EventId, Guid TicketTypeId, TimeSpan OfferTtl);
+
+public sealed record WaitingListEntryDto(Guid Id, Guid UserId, Guid EventId, Guid TicketTypeId, WaitingListStatus Status, DateTime JoinedAt, DateTime? OfferExpiresAt);
+
+public sealed record RefundTicketRequest(Guid TicketId, string RequestedBy, string Reason, string? UserWalletAddress);
+
+public sealed record AdminForceExpireReservationRequest(Guid ReservationId, string AdminUserId, string Note);
+
+public sealed record AdminRetryMintRequest(Guid TicketId, string UserWalletAddress, string AdminUserId, string Reason);
+
+public sealed record AdminRefundTicketRequest(Guid TicketId, string AdminUserId, string Reason, string? UserWalletAddress);
+
+public sealed record AdminVerificationOverrideRequest(Guid TicketId, string AdminUserId, string Reason, DateTime? ValidUntil);
+
+public sealed record AdminAuditNoteDto(Guid Id, Guid? TicketId, Guid? ReservationId, string Action, string AdminUserId, string Note, DateTime CreatedAt);
+
+public sealed record PaymentDto(
+    Guid Id,
+    Guid ReservationId,
+    string PaymentIntentId,
+    string PaymentMethod,
+    decimal Amount,
+    string Currency,
+    PaymentStatus Status,
+    string? TransactionId,
+    string? FailureReason,
+    DateTime? ProcessedAt);
+
 public sealed record ReservationItemDto(Guid Id, Guid TicketTypeId, string TicketTypeName, decimal UnitPrice, int Quantity, decimal TotalPrice);
 
 public sealed record TicketDto(
@@ -44,7 +80,18 @@ public sealed record TicketDto(
     string? TransactionHash,
     DateTime? MintedAt,
     string VerificationCode,
-    DateTime? UsedAt);
+    DateTime? UsedAt,
+    bool IsResaleEligible,
+    decimal? ResalePrice,
+    Guid? ResaleSellerUserId,
+    DateTime? ListedForResaleAt,
+    Guid? TransferredFromUserId,
+    DateTime? TransferredAt,
+    decimal? RefundedAmount,
+    string? RefundReason,
+    DateTime? RefundedAt,
+    bool VerificationOverrideAllowed,
+    DateTime? VerificationOverrideUntil);
 
 public sealed record ReservationDto(
     Guid Id,
@@ -116,6 +163,42 @@ public static class TicketingMappings
             ticket.TransactionHash,
             ticket.MintedAt,
             ticket.VerificationCode,
-            ticket.UsedAt);
+            ticket.UsedAt,
+            ticket.IsResaleEligible,
+            ticket.ResalePrice,
+            ticket.ResaleSellerUserId,
+            ticket.ListedForResaleAt,
+            ticket.TransferredFromUserId,
+            ticket.TransferredAt,
+            ticket.RefundedAmount,
+            ticket.RefundReason,
+            ticket.RefundedAt,
+            ticket.VerificationOverrideAllowed,
+            ticket.VerificationOverrideUntil);
+    }
+
+    public static WaitingListEntryDto ToDto(this WaitingListEntry entry)
+    {
+        return new WaitingListEntryDto(entry.Id, entry.UserId, entry.EventId, entry.TicketTypeId, entry.Status, entry.JoinedAt, entry.OfferExpiresAt);
+    }
+
+    public static AdminAuditNoteDto ToDto(this AdminAuditNote note)
+    {
+        return new AdminAuditNoteDto(note.Id, note.TicketId, note.ReservationId, note.Action, note.AdminUserId, note.Note, note.CreatedAt);
+    }
+
+    public static PaymentDto ToDto(this ReservationPayment payment)
+    {
+        return new PaymentDto(
+            payment.Id,
+            payment.ReservationId,
+            payment.PaymentIntentId,
+            payment.PaymentMethod,
+            payment.Amount,
+            payment.Currency,
+            payment.Status,
+            payment.TransactionId,
+            payment.FailureReason,
+            payment.ProcessedAt);
     }
 }

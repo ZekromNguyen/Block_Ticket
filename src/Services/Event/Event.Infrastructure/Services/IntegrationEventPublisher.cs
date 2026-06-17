@@ -104,6 +104,9 @@ public class IntegrationEventPublisher : IIntegrationEventPublisher
             };
 
             await _publishEndpoint.Publish(integrationEvent, cancellationToken);
+            await _publishEndpoint.Publish(
+                new Shared.Contracts.Events.EventCancelledIntegrationEvent(eventId, reason, cancelledAt),
+                cancellationToken);
             _logger.LogInformation("Successfully published EventCancelled integration event for Event {EventId}", eventId);
         }
         catch (Exception ex)

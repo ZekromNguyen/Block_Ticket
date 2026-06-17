@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: blockticket-dev
+
+resources:
+  - ../../base
+  - ../../infrastructure/postgres.yaml
+  - ../../infrastructure/redis.yaml
+  - ../../infrastructure/rabbitmq.yaml
+  - ../../infrastructure/mailhog.yaml
+
+components:
+  - images
+
+patches:
+  - path: namespace-dev.yaml
+    target:
+      kind: Namespace
+      name: blockticket
+  - path: replicas-dev.yaml
+  - path: config-dev.yaml
+
+secretGenerator:
+  - name: identity-secret
+    envs:
+      - secrets-dev.env
+  - name: event-secret
+    envs:
+      - secrets-dev.env
+  - name: ticketing-secret
+    envs:
+      - secrets-dev.env
+  - name: notification-secret
+    envs:
+      - secrets-dev.env
+  - name: verification-secret
+    envs:
+      - secrets-dev.env
+
+generatorOptions:
+  disableNameSuffixHash: true

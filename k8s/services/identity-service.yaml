@@ -2,10 +2,9 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: identity-config
-  namespace: blockticket
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  ASPNETCORE_URLS: "http://+:80"
+  ASPNETCORE_URLS: "http://+:8080"
   Authentication__Authority: "https://identity-service.blockticket.svc.cluster.local"
   Authentication__Audience: "blockticket-api"
   Application__BaseUrl: "https://blockticket.com"
@@ -39,24 +38,11 @@ data:
   RabbitMQ__Username: "guest"
   RabbitMQ__Password: "guest"
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: identity-secret
-  namespace: blockticket
-type: Opaque
-data:
-  ConnectionStrings__DefaultConnection: SG9zdD1wb3N0Z3Jlcy1zZXJ2aWNlO0RhdGFiYXNlPUJsb2NrVGlja2V0X0lkZW50aXR5O1VzZXJuYW1lPXBvc3RncmVzO1Bhc3N3b3JkPXBvc3RncmVzO1BvcnQ9NTQzMjs=
-  ConnectionStrings__Redis: cmVkaXMtc2VydmljZTo2Mzc5LHBhc3N3b3JkPXJlZGlzX3Bhc3N3b3Jk
-  Security__JwtSecretKey: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1oZXJlLW1ha2UtaXQtbG9uZy1hbmQtcmFuZG9tLWZvci1wcm9kdWN0aW9u # base64 encoded JWT secret
-  Security__EncryptionKey: eW91ci1lbmNyeXB0aW9uLWtleS0zMi1jaGFyYWN0ZXJz # base64 encoded encryption key
-  JWT__SecretKey: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1oZXJlLW1ha2UtaXQtbG9uZy1hbmQtcmFuZG9t # base64 encoded JWT secret
----
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: identity-service
-  namespace: blockticket
   labels:
     app: identity-service
 spec:
@@ -71,10 +57,10 @@ spec:
     spec:
       containers:
       - name: identity-api
-        image: ndtuyen0604/identity-api:latest
+        image: ghcr.io/your-org/blockticket/identity-api:0.0.0-placeholder
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         envFrom:
         - configMapRef:
             name: identity-config
@@ -83,7 +69,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
@@ -91,7 +77,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 80
+            port: 8080
           initialDelaySeconds: 20
           periodSeconds: 10
           timeoutSeconds: 5
@@ -106,8 +92,22 @@ spec:
         volumeMounts:
         - name: logs
           mountPath: /app/logs
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
       volumes:
       - name: logs
+        emptyDir: {}
+      - name: tmp
         emptyDir: {}
       initContainers:
       - name: wait-for-postgres
@@ -131,24 +131,17 @@ spec:
             sleep 2
           done
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
   name: identity-service
-  namespace: blockticket
 spec:
   selector:
     app: identity-service
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 80
-    targetPort: 80
+    targetPort: 8080
   type: ClusterIP
-
-
-
-
-
-
-
-

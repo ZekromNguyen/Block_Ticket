@@ -19,4 +19,10 @@ public sealed class FakePaymentProvider : IPaymentProvider
         var transactionId = $"txn_{Guid.NewGuid():N}";
         return Task.FromResult(new PaymentConfirmationResult(transactionId, true, null, $"{{\"provider\":\"fake\",\"status\":\"succeeded\",\"paymentIntentId\":\"{paymentIntentId}\"}}"));
     }
+
+    public Task<PaymentRefundResult> RefundPaymentAsync(Guid ticketId, decimal amount, string reason, CancellationToken cancellationToken)
+    {
+        var transactionId = $"refund_{Guid.NewGuid():N}";
+        return Task.FromResult(new PaymentRefundResult(transactionId, true, null, $"{{\"provider\":\"fake\",\"status\":\"refunded\",\"ticketId\":\"{ticketId}\"}}"));
+    }
 }

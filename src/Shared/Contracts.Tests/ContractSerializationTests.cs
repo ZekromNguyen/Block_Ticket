@@ -55,6 +55,40 @@ public sealed class ContractSerializationTests
         Assert.Equal(message.Reason, copy.Reason);
     }
 
+    [Fact]
+    public void TicketLifecycleEvents_RoundTrip_WithP1Fields()
+    {
+        var refunded = new TicketRefunded(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 125m, "cancelled", DateTime.UtcNow);
+        var transferred = new TicketTransferred(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 75m, DateTime.UtcNow);
+        var offer = new WaitingListOfferCreated(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow.AddMinutes(10));
+
+        Assert.Equal(refunded.TicketId, RoundTrip(refunded).TicketId);
+        Assert.Equal(transferred.ToUserId, RoundTrip(transferred).ToUserId);
+        Assert.Equal(offer.TicketTypeId, RoundTrip(offer).TicketTypeId);
+    }
+
+    [Fact]
+    public void RetryMintTicketCommand_RoundTrips_WithAuditFields()
+    {
+        var message = new RetryMintTicketCommand(Guid.NewGuid(), "wallet", "admin", "retry requested");
+
+        var copy = RoundTrip(message);
+
+        Assert.Equal(message.TicketId, copy.TicketId);
+        Assert.Equal(message.RequestedBy, copy.RequestedBy);
+        Assert.Equal(message.Reason, copy.Reason);
+    }
+
+    [Fact]
+    public void InventoryAndCancellationEvents_RoundTrip_WithLifecycleFields()
+    {
+        var restocked = new TicketsRestockedIntegrationEvent(Guid.NewGuid(), Guid.NewGuid(), 2, "refund");
+        var cancelled = new EventCancelledIntegrationEvent(Guid.NewGuid(), "weather", DateTime.UtcNow);
+
+        Assert.Equal(restocked.Quantity, RoundTrip(restocked).Quantity);
+        Assert.Equal(cancelled.EventId, RoundTrip(cancelled).EventId);
+    }
+
     private static T RoundTrip<T>(T message)
     {
         var json = JsonSerializer.Serialize(message);

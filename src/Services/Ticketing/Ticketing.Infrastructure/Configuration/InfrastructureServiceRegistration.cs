@@ -26,6 +26,9 @@ public static class InfrastructureServiceRegistration
         {
             bus.AddConsumer<TicketMintedConsumer>();
             bus.AddConsumer<TicketMintFailedConsumer>();
+            bus.AddConsumer<TicketsRestockedConsumer>();
+            bus.AddConsumer<ReservationReleasedConsumer>();
+            bus.AddConsumer<EventCancelledConsumer>();
 
             bus.UsingRabbitMq((context, cfg) =>
             {

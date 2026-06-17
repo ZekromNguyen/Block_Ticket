@@ -1,0 +1,36 @@
+name: Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target base URL"
+        required: true
+        default: "https://staging.blockticket.example.com"
+      script:
+        description: "k6 script"
+        required: true
+        type: choice
+        options:
+          - k6-smoke.js
+          - k6-purchase-read-path.js
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: k6 Load Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Run k6
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: tests/load/${{ github.event.inputs.script }}
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url }}

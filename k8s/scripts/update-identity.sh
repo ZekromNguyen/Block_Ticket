@@ -1,16 +1,12 @@
 #!/bin/bash
 
-# Script to update Identity Service
-# 1. Builds Docker image
-# 2. Pushes to Docker Hub
-# 3. Restarts Kubernetes Deployment
+set -euo pipefail
 
-set -e
+REGISTRY="${REGISTRY:-blockticket}"
+TAG="${TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo local)}"
+IMAGE_NAME="$REGISTRY/identity-api:$TAG"
+NAMESPACE="${NAMESPACE:-blockticket}"
 
-IMAGE_NAME="ndtuyen0604/identity-api:latest"
-SERVICE_DIR="../src/Services/Identity/Identity.API"
-
-# Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
@@ -18,22 +14,20 @@ NC='\033[0m'
 print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 
-# 1. Build Docker Image
-print_status "Building Docker image: $IMAGE_NAME..."
-# Navigate to root to build with correct context
-cd ../..
-docker build -t $IMAGE_NAME -f src/Services/Identity/Identity.API/Dockerfile .
+cd "$(dirname "$0")/../.."
 
-# 2. Push to Docker Hub
-print_status "Pushing image to Docker Hub..."
-docker push $IMAGE_NAME
+print_status "Building Docker image: $IMAGE_NAME"
+docker build -t "$IMAGE_NAME" -f src/Services/Identity/Identity.API/Dockerfile .
 
-# 3. Restart Deployment
-print_status "Restarting Kubernetes deployment..."
-kubectl rollout restart deployment/identity-service -n blockticket
+if [ "${PUSH_IMAGE:-true}" = "true" ]; then
+  print_status "Pushing image: $IMAGE_NAME"
+  docker push "$IMAGE_NAME"
+fi
 
-# 4. Wait for Rollout
-print_status "Waiting for rollout to complete..."
-kubectl rollout status deployment/identity-service -n blockticket
+print_status "Updating Kubernetes deployment image"
+kubectl set image deployment/identity-service identity-api="$IMAGE_NAME" -n "$NAMESPACE"
 
-print_success "Identity Service updated successfully!"
+print_status "Waiting for rollout"
+kubectl rollout status deployment/identity-service -n "$NAMESPACE"
+
+print_success "Identity Service updated to $IMAGE_NAME"

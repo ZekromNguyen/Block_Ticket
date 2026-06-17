@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resale-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:8080"
+  IdentityServer__Authority: "http://identity-service"
+  Services__Ticketing: "http://ticketing-service"
+  Logging__LogLevel__Default: "Information"
+  Logging__LogLevel__Microsoft.AspNetCore: "Warning"
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resale-service
+  labels:
+    app: resale-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: resale-service
+  template:
+    metadata:
+      labels:
+        app: resale-service
+    spec:
+      containers:
+      - name: resale-api
+        image: ghcr.io/your-org/blockticket/resale-api:0.0.0-placeholder
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: resale-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 10001
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: resale-service
+spec:
+  selector:
+    app: resale-service
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 8080
+  type: ClusterIP

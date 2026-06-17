@@ -1,0 +1,50 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blockticket-slo-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: blockticket.api
+      rules:
+        - alert: BlockTicketHigh5xxRate
+          expr: |
+            sum(rate(http_server_request_duration_seconds_count{namespace=~"blockticket.*",status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_server_request_duration_seconds_count{namespace=~"blockticket.*"}[5m]))
+            > 0.05
+          for: 10m
+          labels:
+            severity: page
+          annotations:
+            summary: "BlockTicket API 5xx rate is above 5%"
+            runbook_url: "docs/runbooks/high-5xx-rate.md"
+        - alert: BlockTicketHighLatency
+          expr: |
+            histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{namespace=~"blockticket.*"}[5m])) by (le, service)) > 1.5
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "BlockTicket p95 latency is above 1.5s"
+            runbook_url: "docs/runbooks/high-latency.md"
+    - name: blockticket.platform
+      rules:
+        - alert: BlockTicketDeploymentUnavailable
+          expr: kube_deployment_status_replicas_unavailable{namespace=~"blockticket.*"} > 0
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "BlockTicket deployment has unavailable replicas"
+            runbook_url: "docs/runbooks/deployment-unavailable.md"
+        - alert: BlockTicketRabbitMQBacklog
+          expr: rabbitmq_queue_messages_ready{namespace=~"blockticket.*"} > 1000
+          for: 15m
+          labels:
+            severity: page
+          annotations:
+            summary: "RabbitMQ ready message backlog is high"
+            runbook_url: "docs/runbooks/rabbitmq-backlog.md"

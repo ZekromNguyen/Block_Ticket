@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: blockticket-staging
+
+resources:
+  - ../../base
+  - ../../addons/external-secrets
+  - ../../ingress/ingress.yaml
+
+components:
+  - images
+
+patches:
+  - path: namespace-staging.yaml
+    target:
+      kind: Namespace
+      name: blockticket
+  - path: replicas-staging.yaml
+  - path: config-staging.yaml
+  - path: managed-secrets-staging.yaml

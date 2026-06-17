@@ -12,5 +12,7 @@ RUN dotnet publish "Notification.csproj" -c Release -o /app/publish /p:UseAppHos
 
 FROM base AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin appuser
+COPY --from=build --chown=appuser:appuser /app/publish .
+USER 10001
 ENTRYPOINT ["dotnet", "Notification.dll"]

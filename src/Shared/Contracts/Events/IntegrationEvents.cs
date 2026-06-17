@@ -45,3 +45,8 @@ public record ReservationExpiredIntegrationEvent(Guid ReservationId, Guid EventI
 /// Published when tickets are restocked for an event.
 /// </summary>
 public record TicketsRestockedIntegrationEvent(Guid EventId, Guid TicketTypeId, int Quantity, string Reason);
+
+/// <summary>
+/// Published when an event is cancelled and issued tickets should be refunded.
+/// </summary>
+public record EventCancelledIntegrationEvent(Guid EventId, string Reason, DateTime CancelledAt);

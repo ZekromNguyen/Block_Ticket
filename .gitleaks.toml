@@ -1,0 +1,17 @@
+title = "BlockTicket gitleaks configuration"
+
+[allowlist]
+description = "Intentional placeholders and local-only development credentials."
+paths = [
+  '''.*\.tfvars\.example$''',
+  '''^infra/terraform/aws/environments/.*/backend\.tf\.example$''',
+  '''^k8s/overlays/dev/secrets-dev\.env$''',
+  '''^docker-compose\.dev\.yml$''',
+  '''^\.github/workflows/.*\.(yml|yaml)$''',
+]
+regexes = [
+  '''replace-with-[A-Za-z0-9_-]+''',
+  '''your-org/blockticket''',
+  '''ghcr\.io/your-org/blockticket''',
+  '''dev-only-[A-Za-z0-9_-]+''',
+]

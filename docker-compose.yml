@@ -90,7 +90,7 @@ services:
 
   # MailHog for email testing
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     container_name: blockticket-mailhog
     ports:
       - "1025:1025"  # SMTP
@@ -115,7 +115,7 @@ services:
 
   # Prometheus for metrics (optional)
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.2.1
     container_name: blockticket-prometheus
     ports:
       - "9090:9090"
@@ -134,7 +134,7 @@ services:
 
   # Grafana for monitoring dashboards (optional)
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.5.2
     container_name: blockticket-grafana
     ports:
       - "3000:3000"

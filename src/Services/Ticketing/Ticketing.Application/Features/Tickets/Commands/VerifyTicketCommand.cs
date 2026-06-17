@@ -36,14 +36,16 @@ public sealed class VerifyTicketCommandHandler : IRequestHandler<VerifyTicketCom
             return Result<VerifyTicketResponse>.Success(new VerifyTicketResponse(ticket.Id, false, "Ticket already used", ticket.ToDto()));
         }
 
-        if (ticket.Status != TicketStatus.Active)
+        try
+        {
+            ticket.MarkUsed(request.CheckedBy, request.Location);
+            await _repository.SaveChangesAsync(cancellationToken);
+
+            return Result<VerifyTicketResponse>.Success(new VerifyTicketResponse(ticket.Id, true, "Ticket accepted", ticket.ToDto()));
+        }
+        catch (InvalidOperationException)
         {
             return Result<VerifyTicketResponse>.Success(new VerifyTicketResponse(ticket.Id, false, $"Ticket is {ticket.Status}", ticket.ToDto()));
         }
-
-        ticket.MarkUsed(request.CheckedBy, request.Location);
-        await _repository.SaveChangesAsync(cancellationToken);
-
-        return Result<VerifyTicketResponse>.Success(new VerifyTicketResponse(ticket.Id, true, "Ticket accepted", ticket.ToDto()));
     }
 }

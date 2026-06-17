@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: blockticket
+  labels:
+    name: blockticket-dev
+    environment: development

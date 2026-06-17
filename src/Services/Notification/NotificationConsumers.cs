@@ -1,10 +1,53 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Shared.Contracts.Events;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Notification;
 
-public sealed class TicketPurchasedNotificationConsumer : IConsumer<TicketPurchased>
+public abstract class NotificationConsumerBase
+{
+    protected static async Task StoreMessageAsync(
+        NotificationDbContext context,
+        ILogger logger,
+        string type,
+        Guid correlationId,
+        string recipient,
+        string subject,
+        string body,
+        CancellationToken cancellationToken)
+    {
+        var exists = await context.Messages.AnyAsync(message => message.Type == type && message.CorrelationId == correlationId, cancellationToken);
+        if (exists)
+        {
+            return;
+        }
+
+        context.Messages.Add(new NotificationMessage
+        {
+            Type = type,
+            CorrelationId = correlationId,
+            Recipient = recipient,
+            Subject = subject,
+            Body = body,
+            Status = "Sent",
+            SentAt = DateTime.UtcNow
+        });
+
+        await context.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Notification sent: {Subject} to {Recipient}", subject, recipient);
+    }
+
+    protected static Guid CreateDeterministicId(Guid namespaceId, string name)
+    {
+        var input = Encoding.UTF8.GetBytes($"{namespaceId:N}:{name}");
+        var hash = SHA256.HashData(input);
+        return new Guid(hash[..16]);
+    }
+}
+
+public sealed class TicketPurchasedNotificationConsumer : NotificationConsumerBase, IConsumer<TicketPurchased>
 {
     private readonly NotificationDbContext _context;
     private readonly ILogger<TicketPurchasedNotificationConsumer> _logger;
@@ -18,35 +61,14 @@ public sealed class TicketPurchasedNotificationConsumer : IConsumer<TicketPurcha
     public async Task Consume(ConsumeContext<TicketPurchased> context)
     {
         await StoreMessageAsync(
+            _context,
+            _logger,
             "TicketPurchased",
             context.Message.TicketId,
             $"user:{context.Message.UserId}",
             "Ticket purchase confirmed",
             $"Ticket {context.Message.TicketId} was purchased for event {context.Message.EventId}.",
             context.CancellationToken);
-    }
-
-    private async Task StoreMessageAsync(string type, Guid correlationId, string recipient, string subject, string body, CancellationToken cancellationToken)
-    {
-        var exists = await _context.Messages.AnyAsync(message => message.Type == type && message.CorrelationId == correlationId, cancellationToken);
-        if (exists)
-        {
-            return;
-        }
-
-        _context.Messages.Add(new NotificationMessage
-        {
-            Type = type,
-            CorrelationId = correlationId,
-            Recipient = recipient,
-            Subject = subject,
-            Body = body,
-            Status = "Sent",
-            SentAt = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Notification sent: {Subject} to {Recipient}", subject, recipient);
     }
 }
 
@@ -123,5 +145,81 @@ public sealed class TicketMintFailedNotificationConsumer : IConsumer<TicketMintF
 
         await _context.SaveChangesAsync(context.CancellationToken);
         _logger.LogInformation("Notification sent: Ticket mint failed");
+    }
+}
+
+public sealed class TicketRefundedNotificationConsumer : NotificationConsumerBase, IConsumer<TicketRefunded>
+{
+    private readonly NotificationDbContext _context;
+    private readonly ILogger<TicketRefundedNotificationConsumer> _logger;
+
+    public TicketRefundedNotificationConsumer(NotificationDbContext context, ILogger<TicketRefundedNotificationConsumer> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    public Task Consume(ConsumeContext<TicketRefunded> context)
+    {
+        return StoreMessageAsync(
+            _context,
+            _logger,
+            "TicketRefunded",
+            context.Message.TicketId,
+            $"user:{context.Message.UserId}",
+            "Ticket refunded",
+            $"Ticket {context.Message.TicketId} was refunded for {context.Message.Amount}.",
+            context.CancellationToken);
+    }
+}
+
+public sealed class WaitingListOfferNotificationConsumer : NotificationConsumerBase, IConsumer<YourTurnInWaitingList>
+{
+    private readonly NotificationDbContext _context;
+    private readonly ILogger<WaitingListOfferNotificationConsumer> _logger;
+
+    public WaitingListOfferNotificationConsumer(NotificationDbContext context, ILogger<WaitingListOfferNotificationConsumer> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    public Task Consume(ConsumeContext<YourTurnInWaitingList> context)
+    {
+        var correlationId = CreateDeterministicId(context.Message.EventId, $"{context.Message.UserId}:{context.Message.AvailableUntil:O}");
+        return StoreMessageAsync(
+            _context,
+            _logger,
+            "YourTurnInWaitingList",
+            correlationId,
+            $"user:{context.Message.UserId}",
+            "Ticket available from waiting list",
+            $"A ticket is available until {context.Message.AvailableUntil:O}.",
+            context.CancellationToken);
+    }
+}
+
+public sealed class TicketTransferredNotificationConsumer : NotificationConsumerBase, IConsumer<TicketTransferred>
+{
+    private readonly NotificationDbContext _context;
+    private readonly ILogger<TicketTransferredNotificationConsumer> _logger;
+
+    public TicketTransferredNotificationConsumer(NotificationDbContext context, ILogger<TicketTransferredNotificationConsumer> logger)
+    {
+        _context = context;
+        _logger = logger;
+    }
+
+    public Task Consume(ConsumeContext<TicketTransferred> context)
+    {
+        return StoreMessageAsync(
+            _context,
+            _logger,
+            "TicketTransferred",
+            context.Message.TicketId,
+            $"user:{context.Message.ToUserId}",
+            "Resale ticket transferred",
+            $"Ticket {context.Message.TicketId} was transferred to your account.",
+            context.CancellationToken);
     }
 }

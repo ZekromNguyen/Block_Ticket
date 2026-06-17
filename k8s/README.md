@@ -10,8 +10,9 @@ The BlockTicket application consists of the following components:
 - **Identity Service** - Authentication, authorization, and user management
 - **Event Service** - Event creation, management, and seat mapping
 - **Ticketing Service** - Ticket booking and management
-- **Payment Service** - Payment processing and transactions
 - **Notification Service** - Email and SMS notifications
+- **Resale Service** - Ticket resale and waiting list workflows
+- **Verification Service** - Ticket verification workflows
 - **API Gateway** - Request routing and load balancing
 
 ### Infrastructure
@@ -26,6 +27,8 @@ The BlockTicket application consists of the following components:
 
 ## Directory Structure
 
+Active deployment scripts deploy API Gateway, Identity, Event, Ticketing, Notification, Resale, and Verification. The old payment placeholder manifest was removed because there is no matching Payment service source project or Dockerfile in this repository.
+
 ```
 k8s/
 ├── README.md                     # This file
@@ -39,12 +42,9 @@ k8s/
 │   ├── identity-service.yaml   # Identity service deployment
 │   ├── event-service.yaml      # Event service deployment
 │   ├── ticketing-service.yaml  # Ticketing service deployment
-│   ├── payment-service.yaml    # Payment service deployment
 │   ├── notification-service.yaml # Notification service deployment
 │   └── api-gateway.yaml        # API Gateway deployment
 ├── monitoring/                  # Monitoring stack
-│   ├── prometheus.yaml         # Prometheus metrics
-│   └── grafana.yaml            # Grafana dashboards
 ├── ingress/                     # External access
 │   └── ingress.yaml            # Nginx ingress controller
 ├── scaling/                     # Auto-scaling
@@ -52,7 +52,8 @@ k8s/
 └── scripts/                     # Deployment scripts
     ├── deploy.sh               # Full deployment script
     ├── destroy.sh              # Cleanup script
-    └── build-images.sh         # Docker image build script
+    ├── build-images.sh         # Docker image build script
+    └── update-identity.sh      # Immutable-tag identity update helper
 ```
 
 ## Prerequisites
@@ -69,6 +70,8 @@ k8s/
 
 ## Quick Start
 
+For the stronger portfolio deployment path, use Terraform/OpenTofu in `infra/terraform/aws` and Kustomize overlays in `k8s/overlays`. See `docs/devops/phase-2-platform.md`.
+
 ### 1. Build Docker Images
 
 First, build all the Docker images:
@@ -81,7 +84,7 @@ chmod +x *.sh
 
 Environment variables:
 - `REGISTRY`: Docker registry (default: `blockticket`)
-- `TAG`: Image tag (default: `latest`)
+- `TAG`: Image tag (default: current Git short SHA, or `local` outside Git)
 - `PUSH_IMAGES`: Set to `true` to push images to registry
 
 Example with custom registry:
@@ -100,11 +103,12 @@ Deploy the entire application:
 This script will:
 1. Create the namespace
 2. Deploy infrastructure components (PostgreSQL, Redis, RabbitMQ)
-3. Wait for infrastructure to be ready
-4. Deploy application services
-5. Deploy monitoring stack
-6. Configure ingress and auto-scaling
-7. Display deployment status
+3. Apply baseline NetworkPolicies and PodDisruptionBudgets
+4. Wait for infrastructure to be ready
+5. Deploy application services
+6. Deploy monitoring stack
+7. Configure ingress and auto-scaling
+8. Display deployment status
 
 ### 3. Access the Application
 
@@ -184,11 +188,11 @@ For production, consider:
 
 To update the application:
 
-1. Build new Docker images with new tags
-2. Update image tags in deployment files
+1. Build new Docker images with immutable tags
+2. Update deployment images with `kubectl set image` or CI/CD
 3. Apply updates:
    ```bash
-   kubectl apply -f services/
+   kubectl set image deployment/identity-service identity-api=registry.example.com/blockticket/identity-api:<git-sha> -n blockticket
    ```
 
 ### Scaling

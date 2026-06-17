@@ -96,23 +96,3 @@ spec:
             name: mailhog-service
             port:
               number: 8025
----
-# Basic auth secret for monitoring access
-apiVersion: v1
-kind: Secret
-metadata:
-  name: monitoring-auth
-  namespace: blockticket
-type: Opaque
-data:
-  auth: YWRtaW46JGFwcjEkSDY1dnY0ZDAkSVVRVmFSdVVFVVo1Lnd4NGNGbVl4LwoK # admin:admin (htpasswd format)
-
-
-
-
-
-
-
-
-
-

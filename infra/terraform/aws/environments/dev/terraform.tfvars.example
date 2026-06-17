@@ -1,0 +1,5 @@
+project             = "blockticket"
+environment         = "dev"
+aws_region          = "ap-southeast-1"
+vpc_cidr            = "10.40.0.0/16"
+allowed_cidr_blocks = ["203.0.113.10/32"]

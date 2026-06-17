@@ -1,0 +1,5 @@
+bucket         = "blockticket-tf-state"
+key            = "envs/staging/terraform.tfstate"
+region         = "ap-southeast-1"
+dynamodb_table = "blockticket-tf-state-lock"
+encrypt        = true

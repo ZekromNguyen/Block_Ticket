@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+images:
+  - name: ghcr.io/your-org/blockticket/api-gateway
+    newName: replace-with-registry/blockticket/api-gateway
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/identity-api
+    newName: replace-with-registry/blockticket/identity-api
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/event-api
+    newName: replace-with-registry/blockticket/event-api
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/ticketing-api
+    newName: replace-with-registry/blockticket/ticketing-api
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/notification-api
+    newName: replace-with-registry/blockticket/notification-api
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/blockchain-orchestrator
+    newName: replace-with-registry/blockticket/blockchain-orchestrator
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/resale-api
+    newName: replace-with-registry/blockticket/resale-api
+    newTag: replace-with-git-sha
+  - name: ghcr.io/your-org/blockticket/verification-api
+    newName: replace-with-registry/blockticket/verification-api
+    newTag: replace-with-git-sha

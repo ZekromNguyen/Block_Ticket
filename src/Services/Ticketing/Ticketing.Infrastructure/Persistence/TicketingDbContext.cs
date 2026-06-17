@@ -17,6 +17,10 @@ public class TicketingDbContext : DbContext
 
     public DbSet<Ticket> Tickets => Set<Ticket>();
 
+    public DbSet<WaitingListEntry> WaitingListEntries => Set<WaitingListEntry>();
+
+    public DbSet<AdminAuditNote> AdminAuditNotes => Set<AdminAuditNote>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -87,9 +91,33 @@ public class TicketingDbContext : DbContext
             entity.Property(ticket => ticket.VerificationCode).IsRequired().HasMaxLength(32);
             entity.Property(ticket => ticket.UsedBy).HasMaxLength(128);
             entity.Property(ticket => ticket.UsedLocation).HasMaxLength(200);
+            entity.Property(ticket => ticket.ResalePrice).HasColumnType("decimal(18,2)");
+            entity.Property(ticket => ticket.RefundedAmount).HasColumnType("decimal(18,2)");
+            entity.Property(ticket => ticket.RefundReason).HasMaxLength(300);
+            entity.Property(ticket => ticket.VerificationOverrideReason).HasMaxLength(300);
             entity.HasIndex(ticket => ticket.TicketNumber).IsUnique();
             entity.HasIndex(ticket => ticket.VerificationCode).IsUnique();
             entity.HasIndex(ticket => new { ticket.UserId, ticket.EventId });
+            entity.HasIndex(ticket => new { ticket.Status, ticket.EventId });
+            entity.HasIndex(ticket => ticket.ResaleSellerUserId);
+        });
+
+        modelBuilder.Entity<WaitingListEntry>(entity =>
+        {
+            entity.HasKey(entry => entry.Id);
+            entity.Property(entry => entry.Status).HasConversion<string>().HasMaxLength(32);
+            entity.HasIndex(entry => new { entry.EventId, entry.TicketTypeId, entry.UserId }).IsUnique();
+            entity.HasIndex(entry => new { entry.EventId, entry.TicketTypeId, entry.Status, entry.JoinedAt });
+        });
+
+        modelBuilder.Entity<AdminAuditNote>(entity =>
+        {
+            entity.HasKey(note => note.Id);
+            entity.Property(note => note.Action).IsRequired().HasMaxLength(80);
+            entity.Property(note => note.AdminUserId).IsRequired().HasMaxLength(128);
+            entity.Property(note => note.Note).IsRequired().HasMaxLength(1000);
+            entity.HasIndex(note => note.TicketId);
+            entity.HasIndex(note => note.ReservationId);
         });
     }
 }

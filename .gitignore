@@ -372,7 +372,7 @@ Thumbs.db
 .DS_Store
 
 # Docker
-.dockerignore
+!.dockerignore
 # Dockerfile  # Commented out - we need Dockerfiles in the repository for CI/CD
 docker-compose.override.yml
 
@@ -400,3 +400,6 @@ logs/
 *.tfstate
 *.tfstate.*
 .terraform/
+
+# Local assistant/tool settings
+.claude/

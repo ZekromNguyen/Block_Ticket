@@ -29,7 +29,10 @@ builder.Services.AddAuthentication("Bearer")
         options.RequireHttpsMetadata = false;
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("admin", "super_admin"));
+});
 
 var app = builder.Build();
 

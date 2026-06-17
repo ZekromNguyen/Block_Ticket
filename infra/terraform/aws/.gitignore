@@ -1,0 +1,14 @@
+# Local Terraform cache and state — never commit
+.terraform/
+.terraform.tfstate*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.tfplan
+*.tfplan
+
+# Backend-init artefacts written by scripts/init-backend.sh
+*.backend.hcl

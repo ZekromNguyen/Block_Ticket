@@ -1,8 +1,11 @@
 using BlockchainOrchestrator;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Shared.Common.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddSharedServices();
 
 builder.Services.AddDbContext<BlockchainDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));

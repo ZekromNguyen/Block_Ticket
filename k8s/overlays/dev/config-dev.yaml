@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+  Application__BaseUrl: "https://dev.blockticket.example.com"
+  Cors__AllowedOrigins__0: "https://dev.blockticket.example.com"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: event-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+  Security__AllowedOrigins__0: "https://dev.blockticket.example.com"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ticketing-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: resale-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verification-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notification-config
+data:
+  ASPNETCORE_ENVIRONMENT: "Development"

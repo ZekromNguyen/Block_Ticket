@@ -1,0 +1,3 @@
+project            = "blockticket"
+aws_region         = "ap-southeast-1"
+state_retain_days  = 90

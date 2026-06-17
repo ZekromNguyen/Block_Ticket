@@ -67,16 +67,13 @@ delete_resources() {
     kubectl delete -f ../ingress/ingress.yaml --ignore-not-found=true
     kubectl delete -f ../scaling/hpa.yaml --ignore-not-found=true
     
-    # Delete monitoring
-    print_status "Deleting monitoring components..."
-    kubectl delete -f ../monitoring/grafana.yaml --ignore-not-found=true
-    kubectl delete -f ../monitoring/prometheus.yaml --ignore-not-found=true
+    # Observability is managed by ArgoCD/kube-prometheus-stack in Phase 3.
+    print_status "Skipping legacy monitoring manifests; remove ArgoCD apps to destroy observability."
     
     # Delete services
     print_status "Deleting application services..."
     kubectl delete -f ../services/api-gateway.yaml --ignore-not-found=true
     kubectl delete -f ../services/notification-service.yaml --ignore-not-found=true
-    kubectl delete -f ../services/payment-service.yaml --ignore-not-found=true
     kubectl delete -f ../services/ticketing-service.yaml --ignore-not-found=true
     kubectl delete -f ../services/event-service.yaml --ignore-not-found=true
     kubectl delete -f ../services/identity-service.yaml --ignore-not-found=true

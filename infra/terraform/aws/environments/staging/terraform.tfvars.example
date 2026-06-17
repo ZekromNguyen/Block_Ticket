@@ -1,0 +1,5 @@
+project     = "blockticket"
+environment = "staging"
+aws_region  = "ap-southeast-1"
+
+allowed_cidr_blocks = ["203.0.113.0/24"]

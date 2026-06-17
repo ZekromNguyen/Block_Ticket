@@ -1,0 +1,80 @@
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      service:
+        description: "Deployment name to roll back"
+        required: true
+        type: choice
+        options:
+          - api-gateway
+          - identity-service
+          - event-service
+          - ticketing-service
+          - notification-service
+          - resale-service
+          - verification-service
+      previous_revision:
+        description: "Optional rollout revision number"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rollback-${{ github.event.inputs.environment }}-${{ github.event.inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Emergency Rollback Deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Roll back deployment
+        shell: bash
+        run: |
+          echo "::warning::Prefer reverting the GitOps image promotion commit. This workflow is for urgent recovery only."
+
+          case "${{ github.event.inputs.environment }}" in
+            dev)        namespace="blockticket-dev" ;;
+            staging)    namespace="blockticket-staging" ;;
+            production) namespace="blockticket" ;;
+            *)          echo "::error::Unknown environment"; exit 1 ;;
+          esac
+
+          service="${{ github.event.inputs.service }}"
+          revision="${{ github.event.inputs.previous_revision }}"
+
+          kubectl rollout history "deployment/${service}" -n "${namespace}"
+
+          if [[ -n "${revision}" ]]; then
+            kubectl rollout undo "deployment/${service}" -n "${namespace}" --to-revision="${revision}"
+          else
+            kubectl rollout undo "deployment/${service}" -n "${namespace}"
+          fi
+
+          kubectl rollout status "deployment/${service}" -n "${namespace}" --timeout=300s

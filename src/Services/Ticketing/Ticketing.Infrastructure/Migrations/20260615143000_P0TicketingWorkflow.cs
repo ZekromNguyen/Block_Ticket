@@ -1,10 +1,14 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Ticketing.Infrastructure.Persistence;
 
 #nullable disable
 
 namespace Ticketing.Infrastructure.Migrations;
 
+[DbContext(typeof(TicketingDbContext))]
+[Migration("20260615143000_P0TicketingWorkflow")]
 public partial class P0TicketingWorkflow : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

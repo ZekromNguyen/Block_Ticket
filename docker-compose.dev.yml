@@ -61,7 +61,7 @@ services:
       - blockticket-network
 
   mailhog:
-    image: mailhog/mailhog:latest
+    image: mailhog/mailhog:v1.0.1
     container_name: blockticket-mailhog
     ports:
       - "1025:1025" # SMTP port
@@ -145,6 +145,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ticketing-api:
+        condition: service_started
+    networks:
+      - blockticket-network
+
+  resale-api:
+    image: blockticket-resale-api:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Resale/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - IdentityServer__Authority=http://identity-api
+      - Services__Ticketing=http://ticketing-api
+    ports:
+      - "5004:80"
+    depends_on:
       ticketing-api:
         condition: service_started
     networks:

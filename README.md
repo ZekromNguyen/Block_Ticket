@@ -1,265 +1,118 @@
-# Block Ticket Backend - Microservices Architecture
+# BlockTicket
 
-Hệ thống quản lý vé blockchain sử dụng kiến trúc microservices với .NET 9, được thiết kế để xử lý việc bán vé, xác thực và giao dịch blockchain một cách hiệu quả và có thể mở rộng.
+BlockTicket is a .NET 9 microservices backend for ticket sales, resale, verification, notifications, and blockchain mint orchestration. The platform now includes Terraform on AWS, Kustomize overlays, External Secrets Operator, signed container images, ArgoCD GitOps, observability resources, and k6 load tests.
 
-## 🏗️ Kiến trúc Tổng quan
+## Architecture
 
-### Microservices
-1. **Identity Service** (Port 5001) - Quản lý người dùng và xác thực với OpenIddict
-2. **Event Service** (Port 5002) - Quản lý sự kiện và thông tin vé
-3. **Ticketing Service** (Port 5003) - Xử lý logic mua vé và thanh toán
-4. **Blockchain Orchestrator** (Worker Service) - Giao tiếp với blockchain
-5. **Resale Service** (Port 5004) - Quản lý việc trả vé và danh sách chờ
-6. **Verification Service** (Port 5005) - Xác minh vé tại cổng vào
-7. **Notification Service** (Worker Service) - Gửi thông báo
-8. **API Gateway** (Port 5000) - Điều hướng và xác thực với YARP
+```mermaid
+flowchart LR
+  Client[Clients] --> Ingress[Ingress]
+  Ingress --> Gateway[API Gateway]
+  Gateway --> Identity[Identity API]
+  Gateway --> Events[Event API]
+  Gateway --> Ticketing[Ticketing API]
+  Gateway --> Resale[Resale API]
+  Gateway --> Verification[Verification API]
+  Ticketing --> RabbitMQ[(RabbitMQ)]
+  Events --> RabbitMQ
+  Notification[Notification Worker] --> RabbitMQ
+  Blockchain[Blockchain Orchestrator] --> RabbitMQ
+  Identity --> Postgres[(RDS PostgreSQL)]
+  Events --> Postgres
+  Ticketing --> Postgres
+  Notification --> Postgres
+  Identity --> Redis[(ElastiCache Redis)]
+  Events --> Redis
+  ESO[External Secrets Operator] --> Secrets[AWS Secrets Manager]
+  Secrets --> Pods[Kubernetes Secrets]
+```
 
-### Infrastructure
-- **PostgreSQL** - Database chính cho từng service
-- **Redis** - Caching và queue management
-- **RabbitMQ** - Message bus cho giao tiếp bất đồng bộ
-- **Ganache** - Local blockchain development
-- **Prometheus & Grafana** - Monitoring và visualization
+## Environments
 
-## 🚀 Cách Setup và Chạy
+| Environment | Namespace | Terraform path | AWS region | Secrets source | DNS |
+| --- | --- | --- | --- | --- | --- |
+| dev | `blockticket-dev` | `infra/terraform/aws/environments/dev` | `ap-southeast-1` | local Kustomize secret generator | `dev.blockticket.example.com` |
+| staging | `blockticket-staging` | `infra/terraform/aws/environments/staging` | `ap-southeast-1` | `blockticket-staging/app` in Secrets Manager | `staging.blockticket.example.com` |
+| prod | `blockticket` | `infra/terraform/aws/environments/prod` | `ap-southeast-1` | `blockticket-prod/app` in Secrets Manager | `blockticket.example.com` |
 
-### Yêu cầu
-- .NET 9 SDK
-- Docker & Docker Compose
-- Visual Studio 2022 hoặc VS Code
+## Deploy End To End
 
-### 1. Clone và Setup
 ```bash
-git clone <repository-url>
-cd Block_Ticket_BE
+cd infra/terraform/aws/bootstrap
+terraform init
+terraform apply
+
+cd ../environments/dev
+../../scripts/init-backend.sh dev
+terraform plan
+terraform apply
+
+aws eks update-kubeconfig --name blockticket-dev --region ap-southeast-1
+kubectl apply -k ../../../k8s/overlays/dev
 ```
 
-### 2. Khởi động Infrastructure
+For staging and production, initialize `staging` or `prod`, install External Secrets Operator in the `external-secrets` namespace, then apply the matching overlay.
+
+## CI/CD
+
+Pull requests run `.github/workflows/pr-checks.yml`: gitleaks, Terraform format/validate, Checkov, Kustomize render smoke tests for dev/staging/prod, Dockerfile presence checks, and `dotnet format`.
+
+Release builds run `.github/workflows/ci-cd.yml`: restore, NuGet audit, build, test, Docker build, Syft SBOM, Cosign keyless signing, Trivy SARIF upload, Cosign verification, then a GitOps promotion commit to `k8s/overlays/<env>/images/kustomization.yaml`. ArgoCD syncs the cluster from Git.
+
+Promotion policy:
+
+- `v*.*.*-rc*` deploys to staging.
+- `v*.*.*` deploys to production.
+- Manual dispatch supports controlled hot-fix deployment.
+
+## GitOps
+
+Install ArgoCD, then apply the app-of-apps resources:
+
 ```bash
-cd docker
-docker-compose -f docker-compose.infrastructure.yml up -d
+kubectl apply -k k8s/gitops/argocd
 ```
 
-Điều này sẽ khởi động:
-- PostgreSQL instances (ports 5432, 5433, 5434)
-- Redis (port 6379)
-- RabbitMQ (port 5672, management UI: 15672)
-- Ganache blockchain (port 8545)
-- Prometheus (port 9090)
-- Grafana (port 3000)
+Update `repoURL` in `k8s/gitops/argocd/*.yaml` from `replace-with-org` to the real repository before installing. Production sync is intentionally not automated by default; promote by tag, review the image-state commit, then sync or approve through ArgoCD.
 
-### 3. Build Solution
+Rollback policy:
+
+- Preferred: revert the image promotion commit in `k8s/overlays/<env>/images/kustomization.yaml`.
+- Emergency: run `.github/workflows/rollback.yml` to call `kubectl rollout undo`.
+
+## Observability
+
+Phase 3 observability resources live under `k8s/addons/observability` and are intended to be synced by ArgoCD:
+
+- kube-prometheus-stack Application for Prometheus, Alertmanager, and Grafana.
+- Loki Application for logs.
+- Tempo Application for traces.
+- OpenTelemetry Collector for OTLP metrics/traces/logs ingestion.
+- ServiceMonitor, PrometheusRule, Grafana datasource, and dashboard ConfigMaps.
+
+SLOs are documented in `docs/sre/slos.md`; alert runbooks live in `docs/runbooks`.
+
+## Load Testing
+
+k6 scripts live in `tests/load` and can be run manually:
+
 ```bash
-dotnet restore
-dotnet build
+k6 run -e BASE_URL=https://staging.blockticket.example.com tests/load/k6-smoke.js
+k6 run -e BASE_URL=https://staging.blockticket.example.com tests/load/k6-purchase-read-path.js
 ```
 
-### 4. Run Migrations
-```bash
-# Identity Service
-cd src/Services/Identity
-dotnet ef database update
+The same scripts are available through `.github/workflows/load-test.yml`.
 
-# Event Service
-cd ../Event
-dotnet ef migrations add InitialCreate
-dotnet ef database update
+## Secrets Flow
 
-# Ticketing Service
-cd ../Ticketing
-dotnet ef migrations add InitialCreate
-dotnet ef database update
-```
+Terraform creates one AWS Secrets Manager secret per environment. External Secrets Operator authenticates with IRSA through the `external-secrets` service account and syncs selected properties into Kubernetes Secrets consumed by deployments. Dev uses overlay-local generated Secrets only for local development.
 
-> **✅ Status Update**: All three main services (Identity, Event, Ticketing) have been successfully migrated to .NET 9 and databases are created with the following schemas:
-> - **BlockTicket_Identity**: ASP.NET Identity with ApplicationUser (DONE ✅)
-> - **BlockTicket_Event**: Events and TicketTypes tables (DONE ✅)  
-> - **BlockTicket_Ticketing**: Tickets and TicketTransactions tables (DONE ✅)
+## Terraform
 
-### 5. Chạy Services (Development)
+Remote state is bootstrapped from `infra/terraform/aws/bootstrap`, which creates an encrypted, versioned S3 bucket and DynamoDB lock table. Environment backends are initialized with `infra/terraform/aws/scripts/init-backend.sh` or `init-backend.ps1`.
 
-#### Cách 1: Sử dụng multiple startup trong Visual Studio
-- Set multiple startup projects trong solution properties
-- Chọn tất cả API projects và worker services
+More detail: `infra/terraform/aws/README.md`.
 
-#### Cách 2: Chạy từng service trong terminal riêng biệt
-```bash
-# Terminal 1 - API Gateway
-cd src/ApiGateway
-dotnet run
+## Decisions
 
-# Terminal 2 - Identity Service
-cd src/Services/Identity
-dotnet run
-
-# Terminal 3 - Event Service
-cd src/Services/Event
-dotnet run
-
-# Terminal 4 - Ticketing Service
-cd src/Services/Ticketing
-dotnet run
-
-# Terminal 5 - Blockchain Orchestrator
-cd src/Services/BlockchainOrchestrator
-dotnet run
-
-# Terminal 6 - Other services...
-```
-
-## 📊 Monitoring
-
-### Prometheus
-- URL: http://localhost:9090
-- Metrics từ tất cả services sẽ được thu thập tự động
-
-### Grafana
-- URL: http://localhost:3000
-- Login: admin/admin
-- Import dashboard cho .NET applications
-
-### RabbitMQ Management
-- URL: http://localhost:15672
-- Login: guest/guest
-
-## 🔧 Configuration
-
-### Connection Strings
-Tất cả services được cấu hình để kết nối với infrastructure containers:
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=BlockTicket_ServiceName;Username=postgres;Password=postgres",
-    "RabbitMQ": "amqp://guest:guest@localhost:5672/",
-    "Redis": "localhost:6379"
-  }
-}
-```
-
-### Blockchain Configuration
-```json
-{
-  "Blockchain": {
-    "RpcUrl": "http://localhost:8545",
-    "ContractAddress": "0x1234567890123456789012345678901234567890",
-    "PrivateKey": "0xprivate_key_here"
-  }
-}
-```
-
-## 🔄 Message Flow
-
-### Ticket Purchase Flow
-1. **User** → API Gateway → **Ticketing Service** (Purchase request)
-2. **Ticketing Service** → RabbitMQ (MintTicketCommand)
-3. **Blockchain Orchestrator** ← RabbitMQ (Consumes command)
-4. **Blockchain Orchestrator** → Blockchain (Mint NFT)
-5. **Blockchain Orchestrator** → RabbitMQ (TicketMinted event)
-6. **Notification Service** ← RabbitMQ (Send confirmation)
-
-### Events & Commands
-- **Commands**: MintTicketCommand, BurnTicketCommand
-- **Events**: UserRegistered, TicketPurchased, TicketMinted, YourTurnInWaitingList
-
-## 🧪 Testing
-
-### API Testing với Swagger
-- API Gateway: http://localhost:5000/swagger
-- Identity Service: http://localhost:5001/swagger
-- Event Service: http://localhost:5002/swagger
-- Ticketing Service: http://localhost:5003/swagger
-
-### Sample API Calls
-
-#### 1. Register User
-```bash
-POST http://localhost:5000/api/identity/auth/register
-{
-  "email": "user@example.com",
-  "password": "Password123!",
-  "firstName": "John",
-  "lastName": "Doe",
-  "userType": 0,
-  "walletAddress": "0x1234..."
-}
-```
-
-#### 2. Create Event
-```bash
-POST http://localhost:5000/api/events
-{
-  "name": "Concert ABC",
-  "description": "Amazing concert",
-  "venue": "Stadium XYZ",
-  "eventDate": "2024-12-31T20:00:00Z",
-  "saleStartDate": "2024-10-01T00:00:00Z",
-  "saleEndDate": "2024-12-30T23:59:59Z",
-  "totalTickets": 1000,
-  "ticketPrice": 100.00,
-  "imageUrl": "https://example.com/image.jpg",
-  "promoterId": "guid-here"
-}
-```
-
-#### 3. Purchase Ticket
-```bash
-POST http://localhost:5000/api/tickets/purchase
-{
-  "eventId": "event-guid",
-  "userId": "user-guid",
-  "price": 100.00,
-  "paymentMethod": "CreditCard",
-  "userWalletAddress": "0x1234..."
-}
-```
-
-## 📁 Project Structure
-
-```
-Block_Ticket_BE/
-├── src/
-│   ├── Services/
-│   │   ├── Identity/           # User management & authentication
-│   │   ├── Event/              # Event management
-│   │   ├── Ticketing/          # Ticket purchasing logic
-│   │   ├── BlockchainOrchestrator/  # Blockchain operations
-│   │   ├── Resale/             # Ticket resale & waiting list
-│   │   ├── Verification/       # Ticket verification
-│   │   └── Notification/       # Notification service
-│   ├── ApiGateway/             # YARP reverse proxy
-│   └── Shared/
-│       ├── Common/             # Shared utilities
-│       └── Contracts/          # Events & Commands
-├── docker/                     # Infrastructure containers
-├── k8s/                        # Kubernetes manifests
-└── BlockTicket.sln            # Solution file
-```
-
-## 🔒 Security
-
-- JWT Bearer token authentication
-- OpenIddict OAuth 2.0 / OIDC server
-- Rate limiting via API Gateway
-- Input validation và sanitization
-- Blockchain transaction signing
-
-## 📈 Scaling
-
-- Mỗi service có thể scale độc lập
-- Redis cluster để cache distribution
-- PostgreSQL read replicas
-- Message queue clustering với RabbitMQ
-- Kubernetes deployment ready
-
-## 🤝 Contributing
-
-1. Fork the project
-2. Create feature branch
-3. Commit changes
-4. Push to branch
-5. Create Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License.
+Architecture decisions live in `docs/adr`.
