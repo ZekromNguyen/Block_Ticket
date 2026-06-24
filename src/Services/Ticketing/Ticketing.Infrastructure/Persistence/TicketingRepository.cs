@@ -31,6 +31,16 @@ public sealed class TicketingRepository : ITicketingRepository
             .FirstOrDefaultAsync(reservation => reservation.IdempotencyKey == idempotencyKey && !reservation.IsDeleted, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Reservation>> GetExpiredReservationsAsync(CancellationToken cancellationToken)
+    {
+        return await _context.Reservations
+            .Include(reservation => reservation.Items)
+            .Where(reservation => reservation.Status == ReservationStatus.Pending &&
+                                  reservation.ExpiresAt < DateTime.UtcNow &&
+                                  !reservation.IsDeleted)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task AddReservationAsync(Reservation reservation, CancellationToken cancellationToken)
     {
         await _context.Reservations.AddAsync(reservation, cancellationToken);
@@ -84,6 +94,16 @@ public sealed class TicketingRepository : ITicketingRepository
         return await _context.WaitingListEntries
             .Where(entry => entry.EventId == eventId && entry.TicketTypeId == ticketTypeId && !entry.IsDeleted)
             .OrderBy(entry => entry.JoinedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<WaitingListEntry>> GetExpiredWaitingListEntriesAsync(CancellationToken cancellationToken)
+    {
+        return await _context.WaitingListEntries
+            .Where(entry => entry.Status == WaitingListStatus.Offered &&
+                            entry.OfferExpiresAt != null &&
+                            entry.OfferExpiresAt < DateTime.UtcNow &&
+                            !entry.IsDeleted)
             .ToListAsync(cancellationToken);
     }
 

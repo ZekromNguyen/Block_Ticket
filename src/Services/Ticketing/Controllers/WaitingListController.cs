@@ -54,4 +54,16 @@ public sealed class WaitingListController : ControllerBase
 
         return Ok(ApiResponse<WaitingListEntryDto>.SuccessResult(result.Value, "Waiting-list offer created"));
     }
+
+    [HttpPost("offers/accept")]
+    public async Task<ActionResult<ApiResponse<WaitingListEntryDto>>> AcceptOffer(AcceptWaitingListOfferRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new AcceptWaitingListOfferCommand(request.UserId, request.EventId, request.TicketTypeId, request.PaymentMethod), cancellationToken);
+        if (!result.Succeeded || result.Value is null)
+        {
+            return BadRequest(ApiResponse<WaitingListEntryDto>.ErrorResult(result.Error ?? "Unable to accept waiting-list offer"));
+        }
+
+        return Ok(ApiResponse<WaitingListEntryDto>.SuccessResult(result.Value, "Waiting-list offer accepted"));
+    }
 }

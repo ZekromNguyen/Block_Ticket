@@ -10,6 +10,7 @@ data:
   Logging__LogLevel__Default: "Information"
   Logging__LogLevel__Microsoft.AspNetCore: "Warning"
   Logging__LogLevel__Microsoft.EntityFrameworkCore: "Warning"
+  Service__Name: "verification-api"
 ---
 
 apiVersion: apps/v1

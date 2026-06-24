@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Ticketing.Application\Ticketing.Application.csproj" />
     <ProjectReference Include="..\Ticketing.Domain\Ticketing.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Shared\Common\Shared.Common.csproj" />
     <ProjectReference Include="..\..\..\Shared\Contracts\Shared.Contracts.csproj" />
   </ItemGroup>
 

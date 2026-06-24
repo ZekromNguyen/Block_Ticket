@@ -10,10 +10,12 @@ public class Reservation : BaseAuditableEntity
     public ReservationStatus Status { get; private set; }
     public DateTime ExpiresAt { get; private set; }
     public decimal Subtotal { get; private set; }
+    public decimal DiscountTotal { get; private set; }
     public decimal ServiceFee { get; private set; }
     public decimal ProcessingFee { get; private set; }
     public decimal TotalAmount { get; private set; }
     public string Currency { get; private set; } = "USD";
+    public string? PricingSnapshotJson { get; private set; }
     public string? IdempotencyKey { get; private set; }
     public string InventoryLockOwner { get; private set; } = string.Empty;
     public string? PaymentIntentId { get; private set; }
@@ -72,6 +74,25 @@ public class Reservation : BaseAuditableEntity
     {
         EnsurePending();
         PaymentIntentId = paymentIntentId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetPricingSnapshot(decimal subtotal, decimal discountTotal, decimal serviceFee, decimal processingFee, decimal totalAmount)
+    {
+        EnsurePending();
+        Subtotal = subtotal;
+        DiscountTotal = discountTotal;
+        ServiceFee = serviceFee;
+        ProcessingFee = processingFee;
+        TotalAmount = totalAmount;
+        PricingSnapshotJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Subtotal = subtotal,
+            DiscountTotal = discountTotal,
+            ServiceFee = serviceFee,
+            ProcessingFee = processingFee,
+            TotalAmount = totalAmount
+        });
         UpdatedAt = DateTime.UtcNow;
     }
 

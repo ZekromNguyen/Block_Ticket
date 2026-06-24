@@ -1,55 +1,41 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ticketing-config
+  name: blockchain-orchestrator-config
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  ASPNETCORE_URLS: "http://+:8080"
   Logging__LogLevel__Default: "Information"
   Logging__LogLevel__Microsoft.AspNetCore: "Warning"
   Logging__LogLevel__Microsoft.EntityFrameworkCore: "Warning"
-  Service__Name: "ticketing-api"
+  Blockchain__ContractAddress: "0x0000000000000000000000000000000000000000"
+  Service__Name: "blockchain-orchestrator"
 ---
 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ticketing-service
+  name: blockchain-orchestrator
   labels:
-    app: ticketing-service
+    app: blockchain-orchestrator
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ticketing-service
+      app: blockchain-orchestrator
   template:
     metadata:
       labels:
-        app: ticketing-service
+        app: blockchain-orchestrator
     spec:
       containers:
-      - name: ticketing-api
-        image: ghcr.io/your-org/blockticket/ticketing-api:0.0.0-placeholder
+      - name: blockchain-orchestrator
+        image: ghcr.io/your-org/blockticket/blockchain-orchestrator:0.0.0-placeholder
         imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8080
         envFrom:
         - configMapRef:
-            name: ticketing-config
+            name: blockchain-orchestrator-config
         - secretRef:
-            name: ticketing-secret
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 60
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 20
-          periodSeconds: 10
+            name: blockchain-orchestrator-secret
         resources:
           requests:
             memory: "128Mi"
@@ -76,7 +62,7 @@ spec:
       initContainers:
       - name: wait-for-postgres
         image: postgres:16-alpine
-        command: 
+        command:
         - sh
         - -c
         - |
@@ -84,18 +70,28 @@ spec:
             echo "Waiting for PostgreSQL..."
             sleep 2
           done
+      - name: wait-for-rabbitmq
+        image: rabbitmq:3-management-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until rabbitmq-diagnostics -h rabbitmq-service check_port_connectivity; do
+            echo "Waiting for RabbitMQ..."
+            sleep 2
+          done
 ---
 
 apiVersion: v1
 kind: Service
 metadata:
-  name: ticketing-service
+  name: blockchain-orchestrator
 spec:
   selector:
-    app: ticketing-service
+    app: blockchain-orchestrator
   ports:
   - name: http
     protocol: TCP
     port: 80
-    targetPort: 8080
+    targetPort: 80
   type: ClusterIP

@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.ConfigureSerilog();
 
 // Add services
-builder.Services.AddSharedServices();
+builder.Services.AddSharedServices(builder.Configuration);
 
 // Add Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -65,6 +65,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     });
 }
 
+app.UseCorrelationId();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -73,5 +74,8 @@ app.MapReverseProxy();
 
 // Map health checks
 app.MapHealthChecks("/health");
+
+// Map Prometheus metrics endpoint
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();

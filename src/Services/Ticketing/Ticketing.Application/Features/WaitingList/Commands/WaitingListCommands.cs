@@ -12,6 +12,8 @@ public sealed record LeaveWaitingListCommand(Guid UserId, Guid EventId, Guid Tic
 
 public sealed record CreateWaitingListOfferCommand(WaitingListOfferRequest Request) : IRequest<Result<WaitingListEntryDto>>;
 
+public sealed record AcceptWaitingListOfferCommand(Guid UserId, Guid EventId, Guid TicketTypeId, string PaymentMethod) : IRequest<Result<WaitingListEntryDto>>;
+
 public sealed class JoinWaitingListCommandHandler : IRequestHandler<JoinWaitingListCommand, Result<WaitingListEntryDto>>
 {
     private readonly ITicketingRepository _repository;
@@ -87,5 +89,43 @@ public sealed class CreateWaitingListOfferCommandHandler : IRequestHandler<Creat
         await _publisher.PublishWaitingListOfferAsync(next, cancellationToken);
 
         return Result<WaitingListEntryDto>.Success(next.ToDto());
+    }
+}
+
+public sealed class AcceptWaitingListOfferCommandHandler : IRequestHandler<AcceptWaitingListOfferCommand, Result<WaitingListEntryDto>>
+{
+    private readonly ITicketingRepository _repository;
+    private readonly ITicketEventPublisher _publisher;
+
+    public AcceptWaitingListOfferCommandHandler(ITicketingRepository repository, ITicketEventPublisher publisher)
+    {
+        _repository = repository;
+        _publisher = publisher;
+    }
+
+    public async Task<Result<WaitingListEntryDto>> Handle(AcceptWaitingListOfferCommand command, CancellationToken cancellationToken)
+    {
+        var entry = await _repository.GetWaitingListEntryAsync(command.UserId, command.EventId, command.TicketTypeId, cancellationToken);
+        if (entry is null)
+        {
+            return Result<WaitingListEntryDto>.Failure("Waiting list entry not found");
+        }
+
+        if (entry.Status != WaitingListStatus.Offered)
+        {
+            return Result<WaitingListEntryDto>.Failure("No active offer for this entry");
+        }
+
+        if (entry.OfferExpiresAt.HasValue && entry.OfferExpiresAt.Value < DateTime.UtcNow)
+        {
+            entry.MarkExpired();
+            await _repository.SaveChangesAsync(cancellationToken);
+            return Result<WaitingListEntryDto>.Failure("Offer has expired");
+        }
+
+        entry.MarkAccepted();
+        await _repository.SaveChangesAsync(cancellationToken);
+
+        return Result<WaitingListEntryDto>.Success(entry.ToDto());
     }
 }

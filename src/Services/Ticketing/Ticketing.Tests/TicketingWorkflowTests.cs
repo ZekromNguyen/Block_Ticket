@@ -1,7 +1,9 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Shared.Contracts.Dtos;
 using Ticketing.Application.Configuration;
 using Ticketing.Application.DTOs;
+using Ticketing.Application.Features.Admin.Commands;
 using Ticketing.Application.Features.Refunds.Commands;
 using Ticketing.Application.Features.Reservations.Commands;
 using Ticketing.Application.Features.Resale.Commands;
@@ -49,6 +51,7 @@ public sealed class TicketingWorkflowTests
             "wallet-1",
             Guid.NewGuid(),
             "GA",
+            "USD",
             "purchase-1")));
 
         Assert.True(result.Succeeded);
@@ -113,6 +116,61 @@ public sealed class TicketingWorkflowTests
         Assert.Single(publisher.BurnCommands);
     }
 
+    [Fact]
+    public async Task AdminForceExpireReservation_WhenReservationExists_ExpiresAndPublishesRelease()
+    {
+        var provider = BuildServices();
+        var mediator = provider.GetRequiredService<IMediator>();
+        var repository = (InMemoryRepository)provider.GetRequiredService<ITicketingRepository>();
+        var publisher = (RecordingPublisher)provider.GetRequiredService<ITicketEventPublisher>();
+
+        var reservation = new Reservation(Guid.NewGuid(), Guid.NewGuid(), "USD", "admin-test", "lock-1", DateTime.UtcNow.AddMinutes(15));
+        reservation.AddItem(Guid.NewGuid(), "GA", 50m, 1);
+        repository.AddReservationDirect(reservation);
+
+        var result = await mediator.Send(new ForceExpireReservationCommand(
+            new AdminForceExpireReservationRequest(reservation.Id, "admin-1", "Testing force expire")));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(ReservationStatus.Expired, result.Value!.Status);
+    }
+
+    [Fact]
+    public async Task AdminRetryMint_WhenTicketExists_PublishesRetryAndAuditNote()
+    {
+        var provider = BuildServices();
+        var mediator = provider.GetRequiredService<IMediator>();
+        var repository = (InMemoryRepository)provider.GetRequiredService<ITicketingRepository>();
+        var publisher = (RecordingPublisher)provider.GetRequiredService<ITicketEventPublisher>();
+        var ticket = repository.AddActiveTicket(Guid.NewGuid());
+
+        var result = await mediator.Send(new RetryTicketMintCommand(
+            new AdminRetryMintRequest(ticket.Id, "wallet-1", "admin-1", "Retrying due to earlier failure")));
+
+        Assert.True(result.Succeeded);
+        Assert.Single(repository.AuditNotes);
+    }
+
+    [Fact]
+    public async Task WaitingListOfferAcceptance_WhenOfferActive_MarksAccepted()
+    {
+        var provider = BuildServices();
+        var mediator = provider.GetRequiredService<IMediator>();
+        var repository = (InMemoryRepository)provider.GetRequiredService<ITicketingRepository>();
+        var eventId = Guid.NewGuid();
+        var ticketTypeId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        await mediator.Send(new JoinWaitingListCommand(new WaitingListJoinRequest(userId, eventId, ticketTypeId)));
+        var offer = await mediator.Send(new CreateWaitingListOfferCommand(new WaitingListOfferRequest(eventId, ticketTypeId, TimeSpan.FromMinutes(10))));
+        Assert.True(offer.Succeeded);
+
+        var accept = await mediator.Send(new AcceptWaitingListOfferCommand(userId, eventId, ticketTypeId, "card"));
+
+        Assert.True(accept.Succeeded);
+        Assert.Equal(WaitingListStatus.Accepted, accept.Value!.Status);
+    }
+
     private static ServiceProvider BuildServices()
     {
         var services = new ServiceCollection();
@@ -121,6 +179,11 @@ public sealed class TicketingWorkflowTests
         services.AddSingleton<IInventoryLockService, OpenInventoryLock>();
         services.AddSingleton<IPaymentProvider, PassingPaymentProvider>();
         services.AddSingleton<ITicketEventPublisher, RecordingPublisher>();
+        services.AddSingleton<ISeatMapAvailabilityService, NoOpSeatMapAvailability>();
+        services.AddSingleton<ITicketResalePolicy, AllowAllResalePolicy>();
+        services.AddSingleton<IPricingEvaluationService, PassThroughPricingEvaluation>();
+        services.AddSingleton<ICurrencyPolicyService, AllowAllCurrencyPolicy>();
+        services.AddSingleton<IRiskAssessmentService, ApprovingRiskAssessment>();
         return services.BuildServiceProvider();
     }
 
@@ -130,6 +193,8 @@ public sealed class TicketingWorkflowTests
         private readonly List<Ticket> _tickets = new();
         private readonly List<WaitingListEntry> _waitingListEntries = new();
         private readonly List<AdminAuditNote> _adminAuditNotes = new();
+
+        public IReadOnlyCollection<AdminAuditNote> AuditNotes => _adminAuditNotes;
 
         public Ticket AddActiveTicket(Guid userId)
         {
@@ -141,6 +206,11 @@ public sealed class TicketingWorkflowTests
             return ticket;
         }
 
+        public void AddReservationDirect(Reservation reservation)
+        {
+            _reservations.Add(reservation);
+        }
+
         public Task<Reservation?> GetReservationByIdAsync(Guid reservationId, CancellationToken cancellationToken)
         {
             return Task.FromResult(_reservations.FirstOrDefault(reservation => reservation.Id == reservationId));
@@ -149,6 +219,12 @@ public sealed class TicketingWorkflowTests
         public Task<Reservation?> GetReservationByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken)
         {
             return Task.FromResult(_reservations.FirstOrDefault(reservation => reservation.IdempotencyKey == idempotencyKey));
+        }
+
+        public Task<IReadOnlyCollection<Reservation>> GetExpiredReservationsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyCollection<Reservation>>(
+                _reservations.Where(r => r.Status == ReservationStatus.Pending && r.ExpiresAt < DateTime.UtcNow).ToList());
         }
 
         public Task AddReservationAsync(Reservation reservation, CancellationToken cancellationToken)
@@ -191,6 +267,12 @@ public sealed class TicketingWorkflowTests
         public Task<IReadOnlyCollection<WaitingListEntry>> GetWaitingListEntriesAsync(Guid eventId, Guid ticketTypeId, CancellationToken cancellationToken)
         {
             return Task.FromResult<IReadOnlyCollection<WaitingListEntry>>(_waitingListEntries.Where(entry => entry.EventId == eventId && entry.TicketTypeId == ticketTypeId).OrderBy(entry => entry.JoinedAt).ToList());
+        }
+
+        public Task<IReadOnlyCollection<WaitingListEntry>> GetExpiredWaitingListEntriesAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyCollection<WaitingListEntry>>(
+                _waitingListEntries.Where(e => e.Status == WaitingListStatus.Offered && e.OfferExpiresAt != null && e.OfferExpiresAt < DateTime.UtcNow).ToList());
         }
 
         public Task AddWaitingListEntryAsync(WaitingListEntry entry, CancellationToken cancellationToken)
@@ -325,6 +407,86 @@ public sealed class TicketingWorkflowTests
         {
             Restocked.Add(ticket.Id);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpSeatMapAvailability : ISeatMapAvailabilityService
+    {
+        public Task<SeatAvailabilitySnapshotDto?> GetSnapshotAsync(Guid eventId, Guid ticketTypeId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<SeatAvailabilitySnapshotDto?>(null);
+        }
+
+        public Task<SeatHoldResponseDto?> HoldSeatsAsync(SeatHoldRequestDto request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<SeatHoldResponseDto?>(new SeatHoldResponseDto("hold-1", request.EventId, request.SeatIds, new List<Guid>(), request.ExpiresAt));
+        }
+
+        public Task ReleaseSeatsAsync(Guid eventId, Guid ticketTypeId, string holdOwner, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task ConfirmSeatsAsync(Guid eventId, Guid ticketTypeId, string holdOwner, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class AllowAllResalePolicy : ITicketResalePolicy
+    {
+        public Task<ResalePolicyDto> GetPolicyAsync(Guid eventId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new ResalePolicyDto(eventId, true, null, null, null));
+        }
+
+        public Task<ResalePolicyCheckResult> CheckAsync(Guid eventId, decimal originalPrice, decimal requestedPrice, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(ResalePolicyCheckResult.Allow());
+        }
+    }
+
+    private sealed class PassThroughPricingEvaluation : IPricingEvaluationService
+    {
+        public Task<PricingEvaluationResult?> EvaluateAsync(PricingEvaluationRequest request, CancellationToken cancellationToken)
+        {
+            var subtotal = request.Items.Sum(i => i.BaseUnitPrice * i.Quantity);
+            return Task.FromResult<PricingEvaluationResult?>(new PricingEvaluationResult(
+                request.EventId, request.Currency,
+                request.Items.Select(i => new PricedLineItem(
+                    i.TicketTypeId, i.TicketTypeName, i.BaseUnitPrice, i.BaseUnitPrice, i.Quantity,
+                    i.BaseUnitPrice * i.Quantity, 0m)).ToArray(),
+                subtotal, 0m, Math.Round(subtotal * 0.05m, 2), 0.30m,
+                subtotal + Math.Round(subtotal * 0.05m, 2) + 0.30m,
+                Array.Empty<AppliedPricingRule>()));
+        }
+    }
+
+    private sealed class AllowAllCurrencyPolicy : ICurrencyPolicyService
+    {
+        public Task<CurrencyPolicyDto?> GetPolicyAsync(Guid eventId, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<CurrencyPolicyDto?>(new CurrencyPolicyDto(
+                eventId, "USD",
+                new[] { new AllowedCurrency("USD", "US Dollar", null, true) },
+                5.0m, 0.30m, Array.Empty<CurrencyFee>()));
+        }
+
+        public Task<CurrencyValidationResult> ValidateAsync(Guid eventId, string currency, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(CurrencyValidationResult.Ok(
+                new CurrencyPolicyDto(eventId, "USD",
+                    new[] { new AllowedCurrency("USD", "US Dollar", null, true) },
+                    5.0m, 0.30m, Array.Empty<CurrencyFee>())));
+        }
+    }
+
+    private sealed class ApprovingRiskAssessment : IRiskAssessmentService
+    {
+        public Task<RiskAssessmentResult?> AssessAsync(RiskAssessmentRequest request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<RiskAssessmentResult?>(new RiskAssessmentResult(
+                true, "Low", 0.0m, Array.Empty<RiskSignal>(), null));
         }
     }
 }

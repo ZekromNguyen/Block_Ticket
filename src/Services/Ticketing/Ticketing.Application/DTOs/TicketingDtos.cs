@@ -13,6 +13,14 @@ public sealed record CreateReservationRequest(
 
 public sealed record ConfirmReservationRequest(Guid ReservationId, string PaymentMethod, string? UserWalletAddress);
 
+public sealed record CreateSeatReservationRequest(
+    Guid UserId,
+    Guid EventId,
+    Guid TicketTypeId,
+    IReadOnlyCollection<Guid> SeatIds,
+    string Currency,
+    string? IdempotencyKey);
+
 public sealed record PurchaseTicketRequest(
     Guid EventId,
     Guid UserId,
@@ -21,6 +29,7 @@ public sealed record PurchaseTicketRequest(
     string? UserWalletAddress,
     Guid? TicketTypeId,
     string? TicketTypeName,
+    string? Currency,
     string? IdempotencyKey);
 
 public sealed record VerifyTicketRequest(Guid TicketId, string VerificationCode, string CheckedBy, string Location);
@@ -36,6 +45,8 @@ public sealed record CancelResaleRequest(Guid TicketId, Guid SellerUserId, strin
 public sealed record WaitingListJoinRequest(Guid UserId, Guid EventId, Guid TicketTypeId);
 
 public sealed record WaitingListOfferRequest(Guid EventId, Guid TicketTypeId, TimeSpan OfferTtl);
+
+public sealed record AcceptWaitingListOfferRequest(Guid UserId, Guid EventId, Guid TicketTypeId, string PaymentMethod);
 
 public sealed record WaitingListEntryDto(Guid Id, Guid UserId, Guid EventId, Guid TicketTypeId, WaitingListStatus Status, DateTime JoinedAt, DateTime? OfferExpiresAt);
 

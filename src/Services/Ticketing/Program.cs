@@ -15,7 +15,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add shared services
-builder.Services.AddSharedServices();
+builder.Services.AddSharedServices(builder.Configuration);
 builder.Services.AddTicketingApplication();
 builder.Services.AddTicketingInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
@@ -43,17 +43,27 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCorrelationId();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapPrometheusScrapingEndpoint();
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
     using var scope = app.Services.CreateScope();
     var context = scope.ServiceProvider.GetRequiredService<TicketingDbContext>();
     await context.Database.MigrateAsync();
+
+    if (app.Environment.IsDevelopment())
+    {
+        await DevSeedData.SeedAsync(context);
+    }
 }
 
+// Make Program reachable for WebApplicationFactory<Program> in Ticketing.Tests.Admin.
 app.Run();
+
+public partial class Program;

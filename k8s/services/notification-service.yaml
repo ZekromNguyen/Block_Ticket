@@ -15,6 +15,7 @@ data:
   Email__SmtpPort: "1025"
   Email__FromEmail: "noreply@blockticket.com"
   Email__FromName: "BlockTicket"
+  Service__Name: "notification-worker"
 ---
 
 apiVersion: apps/v1
@@ -68,7 +69,7 @@ spec:
       initContainers:
       - name: wait-for-postgres
         image: postgres:16-alpine
-        command: 
+        command:
         - sh
         - -c
         - |
@@ -86,3 +87,18 @@ spec:
             echo "Waiting for RabbitMQ..."
             sleep 2
           done
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+spec:
+  selector:
+    app: notification-service
+  ports:
+  - name: http
+    protocol: TCP
+    port: 80
+    targetPort: 80
+  type: ClusterIP

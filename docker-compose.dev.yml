@@ -82,7 +82,10 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Ticketing;Username=postgres;Password=postgres;Port=5432
       - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+      - ConnectionStrings__Redis=redis:6379,password=redis_password
       - IdentityServer__Authority=http://identity-api
+      - Services__Event=http://event-api
+      - Service__Name=ticketing-api
     ports:
       - "5003:80"
     depends_on:
@@ -90,6 +93,79 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  identity-api:
+    image: blockticket-identity-api:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Identity.API/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Identity;Username=postgres;Password=postgres;Port=5432
+      - ConnectionStrings__Redis=redis:6379,password=redis_password
+      - Service__Name=identity-api
+    ports:
+      - "5001:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  event-api:
+    image: blockticket-event-api:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/Services/Event/Event.API/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Event;Username=postgres;Password=postgres;Port=5432
+      - ConnectionStrings__Redis=redis:6379,password=redis_password
+      - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+      - IdentityServer__Authority=http://identity-api
+      - Service__Name=event-api
+    ports:
+      - "5002:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - blockticket-network
+
+  api-gateway:
+    image: blockticket-api-gateway:local
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: src/ApiGateway/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - IdentityServer__Authority=http://identity-api
+      - Service__Name=api-gateway
+    ports:
+      - "5000:80"
+    depends_on:
+      identity-api:
+        condition: service_started
+      event-api:
+        condition: service_started
+      ticketing-api:
+        condition: service_started
     networks:
       - blockticket-network
 
@@ -103,6 +179,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Blockchain;Username=postgres;Password=postgres;Port=5432
       - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
       - Blockchain__ContractAddress=0x0000000000000000000000000000000000000000
+      - Service__Name=blockchain-orchestrator
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,6 +197,7 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Notification;Username=postgres;Password=postgres;Port=5432
       - ConnectionStrings__RabbitMQ=amqp://guest:guest@rabbitmq:5672/
+      - Service__Name=notification-worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,6 +218,7 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=BlockTicket_Verification;Username=postgres;Password=postgres;Port=5432
       - IdentityServer__Authority=http://identity-api
       - Services__Ticketing=http://ticketing-api
+      - Service__Name=verification-api
     ports:
       - "5005:80"
     depends_on:
@@ -161,11 +240,37 @@ services:
       - ASPNETCORE_URLS=http://+:80
       - IdentityServer__Authority=http://identity-api
       - Services__Ticketing=http://ticketing-api
+      - Service__Name=resale-api
     ports:
       - "5004:80"
     depends_on:
       ticketing-api:
         condition: service_started
+    networks:
+      - blockticket-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["monitoring"]
+    container_name: blockticket-prometheus
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - blockticket-network
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: ["monitoring"]
+    container_name: blockticket-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
     networks:
       - blockticket-network
 

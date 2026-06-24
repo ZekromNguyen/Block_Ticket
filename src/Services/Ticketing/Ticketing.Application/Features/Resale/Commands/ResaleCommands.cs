@@ -18,11 +18,13 @@ public sealed class ListTicketForResaleCommandHandler : IRequestHandler<ListTick
 {
     private readonly ITicketingRepository _repository;
     private readonly ITicketEventPublisher _publisher;
+    private readonly ITicketResalePolicy _resalePolicy;
 
-    public ListTicketForResaleCommandHandler(ITicketingRepository repository, ITicketEventPublisher publisher)
+    public ListTicketForResaleCommandHandler(ITicketingRepository repository, ITicketEventPublisher publisher, ITicketResalePolicy resalePolicy)
     {
         _repository = repository;
         _publisher = publisher;
+        _resalePolicy = resalePolicy;
     }
 
     public async Task<Result<TicketDto>> Handle(ListTicketForResaleCommand command, CancellationToken cancellationToken)
@@ -37,6 +39,12 @@ public sealed class ListTicketForResaleCommandHandler : IRequestHandler<ListTick
         if (ticket.UserId != request.SellerUserId)
         {
             return Result<TicketDto>.Failure("Only the current owner can list the ticket");
+        }
+
+        var policyCheck = await _resalePolicy.CheckAsync(ticket.EventId, ticket.PricePaid, request.Price, cancellationToken);
+        if (!policyCheck.Allowed)
+        {
+            return Result<TicketDto>.Failure(policyCheck.Reason ?? "Resale not allowed by event policy");
         }
 
         ticket.ListForResale(request.Price);

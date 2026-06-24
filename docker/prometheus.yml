@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:80']
+    metrics_path: /metrics
+
+  - job_name: 'identity-service'
+    static_configs:
+      - targets: ['identity-api:80']
+    metrics_path: /metrics
+
+  - job_name: 'event-service'
+    static_configs:
+      - targets: ['event-api:80']
+    metrics_path: /metrics
+
+  - job_name: 'ticketing-service'
+    static_configs:
+      - targets: ['ticketing-api:80']
+    metrics_path: /metrics
+
+  - job_name: 'resale-service'
+    static_configs:
+      - targets: ['resale-api:80']
+    metrics_path: /metrics
+
+  - job_name: 'verification-service'
+    static_configs:
+      - targets: ['verification-api:80']
+    metrics_path: /metrics

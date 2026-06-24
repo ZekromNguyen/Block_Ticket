@@ -1,4 +1,5 @@
 using MediatR;
+using Shared.Contracts.Dtos;
 using Ticketing.Application.Common;
 using Ticketing.Application.DTOs;
 using Ticketing.Application.Interfaces;
@@ -14,17 +15,20 @@ public sealed class ConfirmReservationCommandHandler : IRequestHandler<ConfirmRe
     private readonly IPaymentProvider _paymentProvider;
     private readonly ITicketEventPublisher _eventPublisher;
     private readonly IInventoryLockService _inventoryLockService;
+    private readonly IRiskAssessmentService _riskAssessment;
 
     public ConfirmReservationCommandHandler(
         ITicketingRepository repository,
         IPaymentProvider paymentProvider,
         ITicketEventPublisher eventPublisher,
-        IInventoryLockService inventoryLockService)
+        IInventoryLockService inventoryLockService,
+        IRiskAssessmentService riskAssessment)
     {
         _repository = repository;
         _paymentProvider = paymentProvider;
         _eventPublisher = eventPublisher;
         _inventoryLockService = inventoryLockService;
+        _riskAssessment = riskAssessment;
     }
 
     public async Task<Result<ConfirmReservationResponse>> Handle(ConfirmReservationCommand command, CancellationToken cancellationToken)
@@ -47,6 +51,25 @@ public sealed class ConfirmReservationCommandHandler : IRequestHandler<ConfirmRe
         if (reservation.Status != ReservationStatus.Pending)
         {
             return Result<ConfirmReservationResponse>.Success(new ConfirmReservationResponse(reservation.ToDto(), reservation.Tickets.Select(TicketingMappings.ToDto).ToList()));
+        }
+
+        // Risk assessment before payment
+        var riskRequest = new RiskAssessmentRequest(
+            reservation.UserId,
+            reservation.EventId,
+            reservation.TotalAmount,
+            reservation.Currency,
+            request.PaymentMethod,
+            null,
+            reservation.Items.Sum(i => i.Quantity),
+            null);
+        var riskResult = await _riskAssessment.AssessAsync(riskRequest, cancellationToken);
+        if (riskResult is { Approved: false })
+        {
+            reservation.Cancel($"Risk check failed: {riskResult.ReviewReason ?? "declined"}");
+            await ReleaseInventoryAsync(reservation, cancellationToken);
+            await _repository.SaveChangesAsync(cancellationToken);
+            return Result<ConfirmReservationResponse>.Failure($"Transaction declined: {riskResult.ReviewReason}");
         }
 
         var payment = reservation.AddPayment(

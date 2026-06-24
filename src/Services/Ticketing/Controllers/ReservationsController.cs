@@ -32,6 +32,19 @@ public class ReservationsController : ControllerBase
         return Ok(ApiResponse<ReservationDto>.SuccessResult(result.Value, "Reservation created"));
     }
 
+    [HttpPost("seats")]
+    public async Task<ActionResult<ApiResponse<ReservationDto>>> CreateSeatReservation(CreateSeatReservationRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new CreateSeatReservationCommand(
+            request.UserId, request.EventId, request.TicketTypeId, request.SeatIds, request.Currency, request.IdempotencyKey), cancellationToken);
+        if (!result.Succeeded || result.Value is null)
+        {
+            return BadRequest(ApiResponse<ReservationDto>.ErrorResult(result.Error ?? "Seat reservation failed"));
+        }
+
+        return Ok(ApiResponse<ReservationDto>.SuccessResult(result.Value, "Seat reservation created"));
+    }
+
     [HttpPost("{reservationId:guid}/confirm")]
     public async Task<ActionResult<ApiResponse<ConfirmReservationResponse>>> ConfirmReservation(
         Guid reservationId,

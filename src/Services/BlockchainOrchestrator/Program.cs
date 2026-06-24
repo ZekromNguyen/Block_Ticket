@@ -5,7 +5,7 @@ using Shared.Common.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddSharedServices();
+builder.Services.AddSharedServices(builder.Configuration);
 
 builder.Services.AddDbContext<BlockchainDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));

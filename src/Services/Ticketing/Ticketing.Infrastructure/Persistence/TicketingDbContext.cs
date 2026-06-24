@@ -21,6 +21,12 @@ public class TicketingDbContext : DbContext
 
     public DbSet<AdminAuditNote> AdminAuditNotes => Set<AdminAuditNote>();
 
+    public DbSet<EventAnalytics> EventAnalytics => Set<EventAnalytics>();
+
+    public DbSet<TicketTypeAnalyticsEntry> TicketTypeAnalyticsEntries => Set<TicketTypeAnalyticsEntry>();
+
+    public DbSet<DailySalesEntry> DailySalesEntries => Set<DailySalesEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -118,6 +124,37 @@ public class TicketingDbContext : DbContext
             entity.Property(note => note.Note).IsRequired().HasMaxLength(1000);
             entity.HasIndex(note => note.TicketId);
             entity.HasIndex(note => note.ReservationId);
+        });
+
+        modelBuilder.Entity<EventAnalytics>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.EventName).IsRequired().HasMaxLength(200);
+            entity.Property(a => a.TotalRevenue).HasColumnType("decimal(18,2)");
+            entity.Property(a => a.TotalRefundAmount).HasColumnType("decimal(18,2)");
+            entity.Property(a => a.TotalResaleVolume).HasColumnType("decimal(18,2)");
+            entity.HasIndex(a => a.EventId).IsUnique();
+        });
+
+        modelBuilder.Entity<TicketTypeAnalyticsEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TicketTypeName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Revenue).HasColumnType("decimal(18,2)");
+            entity.HasOne<EventAnalytics>()
+                .WithMany(a => a.TicketTypeBreakdown)
+                .HasForeignKey("EventAnalyticsId")
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DailySalesEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Revenue).HasColumnType("decimal(18,2)");
+            entity.HasOne<EventAnalytics>()
+                .WithMany(a => a.DailySales)
+                .HasForeignKey("EventAnalyticsId")
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

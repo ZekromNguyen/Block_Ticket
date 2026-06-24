@@ -8,6 +8,8 @@ public interface ITicketingRepository
 
     Task<Reservation?> GetReservationByIdempotencyKeyAsync(string idempotencyKey, CancellationToken cancellationToken);
 
+    Task<IReadOnlyCollection<Reservation>> GetExpiredReservationsAsync(CancellationToken cancellationToken);
+
     Task AddReservationAsync(Reservation reservation, CancellationToken cancellationToken);
 
     Task<Ticket?> GetTicketByIdAsync(Guid ticketId, CancellationToken cancellationToken);
@@ -21,6 +23,8 @@ public interface ITicketingRepository
     Task<WaitingListEntry?> GetWaitingListEntryAsync(Guid userId, Guid eventId, Guid ticketTypeId, CancellationToken cancellationToken);
 
     Task<IReadOnlyCollection<WaitingListEntry>> GetWaitingListEntriesAsync(Guid eventId, Guid ticketTypeId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyCollection<WaitingListEntry>> GetExpiredWaitingListEntriesAsync(CancellationToken cancellationToken);
 
     Task AddWaitingListEntryAsync(WaitingListEntry entry, CancellationToken cancellationToken);
 

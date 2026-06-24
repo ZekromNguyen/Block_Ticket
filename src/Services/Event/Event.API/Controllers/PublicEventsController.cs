@@ -4,6 +4,8 @@ using Event.Application.Features.Events.Queries.SearchEvents;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 
 using Event.Domain.Enums;
 namespace Event.API.Controllers;
@@ -29,9 +31,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Search public events with advanced filtering
     /// </summary>
-    /// <param name="request">Search request parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Paginated search results</returns>
     [HttpGet("search")]
     [ProducesResponseType(typeof(PagedResult<EventCatalogDto>), (int)HttpStatusCode.OK)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.BadRequest)]
@@ -41,7 +40,6 @@ public class PublicEventsController : ControllerBase
     {
         _logger.LogInformation("Searching public events with term: {SearchTerm}", request.SearchTerm);
 
-        // Convert to internal search query
         var searchQuery = new SearchEventsQuery
         {
             SearchTerm = request.SearchTerm,
@@ -51,18 +49,25 @@ public class PublicEventsController : ControllerBase
             Categories = request.Categories,
             MinPrice = request.MinPrice,
             MaxPrice = request.MaxPrice,
-            HasAvailability = true, // Only show events with availability for public
+            HasAvailability = true,
             PageNumber = request.PageNumber,
             PageSize = request.PageSize
         };
 
         var result = await _mediator.Send(searchQuery, cancellationToken);
 
-        // Add pagination headers
-        Response.Headers.Add("X-Total-Count", result.TotalCount.ToString());
-        Response.Headers.Add("X-Page-Number", result.PageNumber.ToString());
-        Response.Headers.Add("X-Page-Size", result.PageSize.ToString());
-        Response.Headers.Add("X-Total-Pages", result.TotalPages.ToString());
+        var etag = GenerateETag(result);
+        if (Request.Headers.TryGetValue("If-None-Match", out var requestEtag) && requestEtag == etag)
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        Response.Headers["ETag"] = etag;
+        Response.Headers["Cache-Control"] = "public, max-age=30, must-revalidate";
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        Response.Headers["X-Page-Number"] = result.PageNumber.ToString();
+        Response.Headers["X-Page-Size"] = result.PageSize.ToString();
+        Response.Headers["X-Total-Pages"] = result.TotalPages.ToString();
 
         return Ok(result);
     }
@@ -70,9 +75,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Get public events catalog
     /// </summary>
-    /// <param name="request">Get public events request parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Paginated events catalog</returns>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<EventCatalogDto>), (int)HttpStatusCode.OK)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.BadRequest)]
@@ -82,14 +84,13 @@ public class PublicEventsController : ControllerBase
     {
         _logger.LogInformation("Getting public events catalog");
 
-        // Convert to internal search query
         var searchQuery = new SearchEventsQuery
         {
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             City = request.City,
             Categories = request.Categories,
-            HasAvailability = true, // Only show events with availability for public
+            HasAvailability = true,
             PageNumber = request.PageNumber,
             PageSize = request.PageSize,
             SortBy = "EventDate",
@@ -98,11 +99,18 @@ public class PublicEventsController : ControllerBase
 
         var result = await _mediator.Send(searchQuery, cancellationToken);
 
-        // Add pagination headers
-        Response.Headers.Add("X-Total-Count", result.TotalCount.ToString());
-        Response.Headers.Add("X-Page-Number", result.PageNumber.ToString());
-        Response.Headers.Add("X-Page-Size", result.PageSize.ToString());
-        Response.Headers.Add("X-Total-Pages", result.TotalPages.ToString());
+        var etag = GenerateETag(result);
+        if (Request.Headers.TryGetValue("If-None-Match", out var requestEtag) && requestEtag == etag)
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        Response.Headers["ETag"] = etag;
+        Response.Headers["Cache-Control"] = "public, max-age=30, must-revalidate";
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        Response.Headers["X-Page-Number"] = result.PageNumber.ToString();
+        Response.Headers["X-Page-Size"] = result.PageSize.ToString();
+        Response.Headers["X-Total-Pages"] = result.TotalPages.ToString();
 
         return Ok(result);
     }
@@ -110,9 +118,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Get public event details by ID
     /// </summary>
-    /// <param name="eventId">Event ID</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Public event details</returns>
     [HttpGet("{eventId:guid}")]
     [ProducesResponseType(typeof(EventDetailDto), (int)HttpStatusCode.OK)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
@@ -122,7 +127,7 @@ public class PublicEventsController : ControllerBase
     {
         _logger.LogInformation("Getting public event detail {EventId}", eventId);
 
-        var query = new GetEventQuery(eventId, true, false); // Include ticket types but not pricing rules
+        var query = new GetEventQuery(eventId, true, false);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result == null)
@@ -130,14 +135,21 @@ public class PublicEventsController : ControllerBase
             return NotFound($"Event with ID '{eventId}' not found");
         }
 
-        // Check if event is published and available to public
         if (result.Status != EventStatus.Published)
         {
             return NotFound($"Event with ID '{eventId}' is not available to the public");
         }
 
-        // Convert to public event detail DTO
         var eventDetail = MapToEventDetailDto(result);
+
+        var etag = GenerateETag(eventDetail);
+        if (Request.Headers.TryGetValue("If-None-Match", out var requestEtag) && requestEtag == etag)
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        Response.Headers["ETag"] = etag;
+        Response.Headers["Cache-Control"] = "public, max-age=60, must-revalidate";
 
         return Ok(eventDetail);
     }
@@ -145,10 +157,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Get public event details by slug
     /// </summary>
-    /// <param name="organizationId">Organization ID</param>
-    /// <param name="slug">Event slug</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Public event details</returns>
     [HttpGet("by-slug/{organizationId:guid}/{slug}")]
     [ProducesResponseType(typeof(EventDetailDto), (int)HttpStatusCode.OK)]
     [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
@@ -168,14 +176,21 @@ public class PublicEventsController : ControllerBase
             return NotFound($"Event with slug '{slug}' not found for organization '{organizationId}'");
         }
 
-        // Check if event is published and available to public
         if (result.Status != EventStatus.Published)
         {
             return NotFound($"Event with slug '{slug}' is not available to the public");
         }
 
-        // Convert to public event detail DTO
         var eventDetail = MapToEventDetailDto(result);
+
+        var etag = GenerateETag(eventDetail);
+        if (Request.Headers.TryGetValue("If-None-Match", out var requestEtag) && requestEtag == etag)
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        Response.Headers["ETag"] = etag;
+        Response.Headers["Cache-Control"] = "public, max-age=60, must-revalidate";
 
         return Ok(eventDetail);
     }
@@ -183,11 +198,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Get upcoming public events
     /// </summary>
-    /// <param name="days">Number of days to look ahead (default: 30)</param>
-    /// <param name="pageNumber">Page number</param>
-    /// <param name="pageSize">Page size</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Upcoming events</returns>
     [HttpGet("upcoming")]
     [ProducesResponseType(typeof(PagedResult<EventCatalogDto>), (int)HttpStatusCode.OK)]
     public async Task<ActionResult<PagedResult<EventCatalogDto>>> GetUpcomingEvents(
@@ -213,11 +223,18 @@ public class PublicEventsController : ControllerBase
 
         var result = await _mediator.Send(searchQuery, cancellationToken);
 
-        // Add pagination headers
-        Response.Headers.Add("X-Total-Count", result.TotalCount.ToString());
-        Response.Headers.Add("X-Page-Number", result.PageNumber.ToString());
-        Response.Headers.Add("X-Page-Size", result.PageSize.ToString());
-        Response.Headers.Add("X-Total-Pages", result.TotalPages.ToString());
+        var etag = GenerateETag(result);
+        if (Request.Headers.TryGetValue("If-None-Match", out var requestEtag) && requestEtag == etag)
+        {
+            return StatusCode(StatusCodes.Status304NotModified);
+        }
+
+        Response.Headers["ETag"] = etag;
+        Response.Headers["Cache-Control"] = "public, max-age=30, must-revalidate";
+        Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
+        Response.Headers["X-Page-Number"] = result.PageNumber.ToString();
+        Response.Headers["X-Page-Size"] = result.PageSize.ToString();
+        Response.Headers["X-Total-Pages"] = result.TotalPages.ToString();
 
         return Ok(result);
     }
@@ -225,9 +242,6 @@ public class PublicEventsController : ControllerBase
     /// <summary>
     /// Get recommended events (placeholder implementation)
     /// </summary>
-    /// <param name="request">Recommendation request parameters</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Recommended events</returns>
     [HttpGet("recommended")]
     [ProducesResponseType(typeof(List<EventCatalogDto>), (int)HttpStatusCode.OK)]
     public async Task<ActionResult<List<EventCatalogDto>>> GetRecommendedEvents(
@@ -236,8 +250,6 @@ public class PublicEventsController : ControllerBase
     {
         _logger.LogInformation("Getting recommended events for user {UserId}", request.UserId);
 
-        // This would need to be implemented with a recommendation engine
-        // For now, return upcoming events as recommendations
         var searchQuery = new SearchEventsQuery
         {
             StartDate = DateTime.UtcNow,
@@ -253,6 +265,14 @@ public class PublicEventsController : ControllerBase
         var result = await _mediator.Send(searchQuery, cancellationToken);
 
         return Ok(result.Items.ToList());
+    }
+
+    private static string GenerateETag(object data)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(data);
+        using var sha256 = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(json));
+        return $"\"{Convert.ToHexString(hashBytes).ToLowerInvariant()}\"";
     }
 
     private static EventDetailDto MapToEventDetailDto(EventDto eventDto)

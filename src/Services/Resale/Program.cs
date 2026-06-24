@@ -7,7 +7,7 @@ builder.ConfigureSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSharedServices();
+builder.Services.AddSharedServices(builder.Configuration);
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient("ticketing", client =>
 {
@@ -32,10 +32,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCorrelationId();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();
